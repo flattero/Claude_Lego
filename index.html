@@ -102,8 +102,9 @@
     <button id="connectBtn" class="wide connect">Connect to Smart Hub</button>
     <div class="status">
       <span id="dot" class="dot"></span>
-      <span id="statusText">Not connected. Press the green button on the hub, then tap Connect.</span>
+      <span id="statusText">Loading… If this message doesn't change, this viewer is blocking the app's scripts. Open the page's https:// web address in the Bluefy browser instead.</span>
     </div>
+    <p class="sub" style="margin:12px 0 0"><a href="#" id="showAll">Hub not in the list? Show all Bluetooth devices</a></p>
     <div class="status" id="batteryRow" hidden>🔋 <span id="battery">–</span></div>
   </section>
 
@@ -234,12 +235,28 @@ function onAttachedIo(event) {
   badge.classList.toggle('on', isMotor);
 }
 
-async function connect() {
+// Explain why Bluetooth can't be used here, or return null if it can.
+function bluetoothProblem() {
+  if (!window.isSecureContext) return 'Bluetooth needs a secure page. Open the app from its https:// address (for example GitHub Pages), not from a file or http:// link.';
+  if (!navigator.bluetooth) return "This browser doesn't support Bluetooth. On iPhone/iPad, open this page in the free Bluefy browser. On other devices, use Chrome or Edge.";
+  if (window.top !== window.self) return 'This page is shown inside a preview frame, which blocks Bluetooth. Open it directly in the browser.';
+  return null;
+}
+
+async function connect(showAll = false) {
+  const problem = bluetoothProblem();
+  if (problem) {
+    setStatus(problem, false);
+    $('#noBle').classList.add('show');
+    log(problem);
+    return;
+  }
   try {
     setStatus('Choose your Smart Hub from the list…', false);
+    log('Opening Bluetooth device chooser' + (showAll ? ' (all devices)' : ''));
     device = await navigator.bluetooth.requestDevice({
-      filters: [{ services: [UUID.DEVICE_SERVICE] }],
-      optionalServices: [UUID.IO_SERVICE, 'battery_service'],
+      ...(showAll ? { acceptAllDevices: true } : { filters: [{ services: [UUID.DEVICE_SERVICE] }] }),
+      optionalServices: [UUID.DEVICE_SERVICE, UUID.IO_SERVICE, 'battery_service'],
     });
     device.addEventListener('gattserverdisconnected', onDisconnected);
     setStatus('Connecting to ' + (device.name || 'Smart Hub') + '…', false);
@@ -264,7 +281,7 @@ async function connect() {
     setControlsEnabled(true);
     log('Connected');
   } catch (err) {
-    log('Connect failed: ' + err.message);
+    log('Connect failed: ' + err.name + ': ' + err.message);
     setStatus(err.name === 'NotFoundError' ? 'No hub chosen.' : 'Could not connect: ' + err.message, false);
     if (device && device.gatt.connected) device.gatt.disconnect();
   }
@@ -334,12 +351,19 @@ $('#connectBtn').addEventListener('click', () => {
   }
 });
 
+$('#showAll').addEventListener('click', e => { e.preventDefault(); connect(true); });
+
 // Safety: stop motors if the page is hidden (app switched, phone locked).
 document.addEventListener('visibilitychange', () => { if (document.hidden) stopAll(); });
 
-if (!navigator.bluetooth) {
+// Leave the button enabled even when Bluetooth is missing, so tapping it explains why.
+const startupProblem = bluetoothProblem();
+if (startupProblem) {
   $('#noBle').classList.add('show');
-  $('#connectBtn').disabled = true;
+  setStatus(startupProblem, false);
+  log(startupProblem);
+} else {
+  setStatus('Not connected. Press the green button on the hub, then tap Connect.', false);
 }
 </script>
 </body>

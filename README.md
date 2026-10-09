@@ -34,6 +34,8 @@ The whole app is the single file `index.html`. It has no dependencies, so you ca
 
 ## Troubleshooting
 
-- **Hub not in the list:** press the hub's green button again (it switches off after a while), and make sure no other device or app is connected to it.
+- **Connect button does nothing:** read the message under the button. The page needs Bluefy on iPhone, an `https://` address, and to be opened directly. A file preview, GitHub's code view, or an app's built-in viewer won't work.
+- **Status stuck on "Loading…":** the viewer is blocking the page's scripts. Open the GitHub Pages address in Bluefy.
+- **Hub not in the list:** tap *Show all Bluetooth devices* under the button and look for "LPF2 Smart Hub" or similar. Also press the hub's green button again (it switches off after a while), and make sure no other device or app is connected to it.
 - **Motor shows "not detected":** unplug the motor cable and plug it back in. The buttons send commands to that port anyway.
 - **Motor won't turn at low speed:** WeDo motors need some power to start moving. The app sets the lowest slider setting to about 30% power.
