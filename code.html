@@ -2,86 +2,122 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#d01012">
-<title>NXT Code</title>
+<title>Block Coding</title>
 <link rel="stylesheet" href="style.css">
 <style>
-  body { padding: 0; }
+  html, body { height: 100%; }
+  body { padding: 0; overflow: hidden; }
+  .app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
   .topbar {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
-    padding: 10px 16px; background: var(--card); border-bottom: 1px solid var(--border);
+    flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px;
+    padding: max(8px, env(safe-area-inset-top)) 16px 8px; background: var(--card); border-bottom: 1px solid var(--border);
   }
-  .topbar h1 { font-size: 1.2rem; margin: 0 8px 0 0; }
-  .topbar button { min-height: 40px; padding: 8px 14px; }
-  .topbar .status { margin: 0; font-size: 0.85rem; max-width: 520px; }
+  .topbar h1 { font-size: 1.1rem; margin: 0; white-space: nowrap; }
+  .topbar button { min-height: 40px; padding: 8px 14px; border-radius: 10px; }
+  .topbar .status { margin: 0; font-size: 0.85rem; min-width: 0; flex: 1 1 220px; }
+  .back { margin: 0; font-size: 1.2rem; }
+  .kitswitch { display: inline-flex; padding: 3px; border-radius: 12px; background: var(--bg); border: 1px solid var(--border); }
+  .kitswitch a {
+    padding: 6px 12px; border-radius: 9px; font-size: 0.9rem; font-weight: 600; text-decoration: none; color: var(--muted);
+  }
+  .kitswitch a[aria-current="page"] { background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+  .toolbar { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .spacer { flex: 1; }
   .run { background: var(--green); }
   .halt { background: var(--red); }
-  .plain { background: var(--border); color: var(--text); }
-  .topbar select { width: auto; padding: 8px; }
-  .layout { display: flex; height: calc(100vh - 62px); min-height: 480px; }
-  #workspace { flex: 1; min-width: 0; }
+  .plain { background: var(--bg); color: var(--text); border: 1px solid var(--border) !important; }
+  .topbar select { width: auto; max-width: 11em; padding: 8px; min-height: 40px; }
+  .layout { flex: 1; min-height: 0; display: flex; }
+  #workspace { flex: 1; min-width: 0; min-height: 0; }
   .side {
     width: 300px; flex: none; overflow: auto; padding: 12px 16px;
     background: var(--bg); border-left: 1px solid var(--border);
   }
-  .side h2 { font-size: 1rem; margin: 8px 0; }
+  .side h2 { font-size: 1rem; margin: 4px 0 8px; }
   .side .card { padding: 12px; margin-bottom: 12px; }
   .readings { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-size: 0.9rem; }
   .readings .v { font-weight: 600; font-variant-numeric: tabular-nums; }
   #output { font-family: ui-monospace, Menlo, monospace; font-size: 0.8rem; white-space: pre-wrap; margin: 0; max-height: 260px; overflow: auto; }
   #output .err { color: var(--red); }
   #code { font-family: ui-monospace, Menlo, monospace; font-size: 0.72rem; white-space: pre; overflow: auto; max-height: 300px; margin: 8px 0 0; }
+  #fileMenu { display: none; }
+  @media (max-width: 600px) {
+    #newBtn, #openBtn, #saveBtn { display: none; }
+    #fileMenu { display: block; }
+    .topbar select { max-width: 6.8em; padding: 6px; font-size: 0.95rem; }
+    .toolbar button { padding: 8px 10px; }
+    .toolbar .spacer { display: none; }
+  }
   @media (max-width: 800px) {
-    .layout { flex-direction: column; height: auto; }
-    #workspace { height: 70vh; }
-    .side { width: auto; border-left: none; }
+    .topbar { padding-left: 12px; padding-right: 12px; }
+    .topbar button { padding: 8px 11px; }
+    .layout { flex-direction: column; }
+    .side {
+      width: auto; max-height: 32vh; border-left: none; border-top: 1px solid var(--border);
+      padding: 8px 12px max(8px, env(safe-area-inset-bottom));
+    }
+    .side .card { margin-bottom: 8px; }
+    .side .help { display: none; }
   }
 </style>
 </head>
 <body>
-<div class="topbar">
-  <a class="back" href="./">←</a>
-  <h1>NXT Code</h1>
-  <button id="usbBtn" class="connect">Connect USB</button>
-  <button id="btBtn" class="connect">Connect Bluetooth</button>
-  <button id="disconnectBtn" class="stopall" hidden>Disconnect</button>
-  <div class="status"><span id="dot" class="dot"></span><span id="statusText">Loading…</span></div>
-  <span class="spacer"></span>
-  <button id="runBtn" class="run" disabled>▶ Run</button>
-  <button id="stopBtn" class="halt" disabled>■ Stop</button>
-  <select id="examples" aria-label="Examples"><option value="">Examples…</option></select>
-  <button id="newBtn" class="plain">New</button>
-  <button id="openBtn" class="plain">Open</button>
-  <button id="saveBtn" class="plain">Download</button>
-  <input type="file" id="fileInput" accept=".json,application/json" hidden>
-</div>
-<div class="layout">
-  <div id="workspace"></div>
-  <aside class="side">
-    <div id="noSupport" class="warn"></div>
-    <section class="card">
-      <h2>Output</h2>
-      <pre id="output"></pre>
-    </section>
-    <section class="card">
-      <h2>Readings</h2>
-      <div class="readings" id="readings"><span class="note">Sensor values appear here while a program runs.</span></div>
-    </section>
-    <section class="card">
-      <h2>How it works</h2>
-      <p class="note">Drag blocks under <strong>when ▶ Run is clicked</strong>, connect the brick, then press Run.
-        The block that is running lights up. Press Stop at any time. Blocks not attached under a Run block don't run.</p>
-      <p class="note">Ports: motors are A, B, C; sensors are 1–4. On the standard 9797 robot, the wheels are B and C.
-        Your program is saved in this browser automatically; use Download to keep a copy or share it.</p>
-      <details>
-        <summary class="note">Show the program as JavaScript</summary>
-        <pre id="code"></pre>
-      </details>
-    </section>
-    <p class="note"><a href="nxt.html">Remote control and sensor setup</a> · <a href="https://developers.google.com/blockly" target="_blank" rel="noopener">Blocks by Blockly</a></p>
-  </aside>
+<div class="app">
+  <div class="topbar">
+    <a class="back" href="./" aria-label="Home">←</a>
+    <h1>Block Coding</h1>
+    <nav class="kitswitch" aria-label="Kit">
+      <a href="?kit=wedo" data-kit="wedo">WeDo 2.0</a>
+      <a href="?kit=nxt" data-kit="nxt">NXT</a>
+    </nav>
+    <button id="hubBtn" class="connect" hidden>Connect hub</button>
+    <button id="usbBtn" class="connect" hidden>Connect USB</button>
+    <button id="btBtn" class="connect" hidden>Connect Bluetooth</button>
+    <button id="disconnectBtn" class="stopall" hidden>Disconnect</button>
+    <div class="status"><span id="dot" class="dot"></span><span id="statusText">Loading… If this message doesn't change, open the page in Chrome or Edge (or Bluefy on iPhone/iPad).</span></div>
+    <div class="toolbar">
+      <button id="runBtn" class="run" disabled>▶ Run</button>
+      <button id="stopBtn" class="halt" disabled>■ Stop</button>
+      <span class="spacer"></span>
+      <select id="examples" aria-label="Examples"><option value="">Examples…</option></select>
+      <button id="newBtn" class="plain">New</button>
+      <button id="openBtn" class="plain">Open</button>
+      <button id="saveBtn" class="plain">Save</button>
+      <select id="fileMenu" aria-label="File">
+        <option value="">File…</option><option value="new">New</option><option value="open">Open…</option><option value="save">Save</option>
+      </select>
+      <input type="file" id="fileInput" accept=".json,application/json" hidden>
+    </div>
+  </div>
+  <div class="layout">
+    <div id="workspace"></div>
+    <aside class="side">
+      <div id="noSupport" class="warn"></div>
+      <section class="card">
+        <h2>Output</h2>
+        <pre id="output"></pre>
+      </section>
+      <section class="card">
+        <h2>Readings</h2>
+        <div class="readings" id="readings"><span class="note">Sensor values appear here while a program runs.</span></div>
+      </section>
+      <section class="card help">
+        <h2>How it works</h2>
+        <p class="note">Drag blocks under <strong>when ▶ Run is clicked</strong>, connect, then press Run.
+          The block that is running lights up. Press Stop at any time. Blocks not attached under a Run block don't run.</p>
+        <p class="note" id="kitHelp"></p>
+        <p class="note">Your program is saved in this browser automatically. Use Save to download a copy to keep or share, and Open to load one.</p>
+        <details>
+          <summary class="note">Show the program as JavaScript</summary>
+          <pre id="code"></pre>
+        </details>
+      </section>
+      <p class="note help"><a id="remoteLink" href="./">Remote control</a> · <a href="https://developers.google.com/blockly" target="_blank" rel="noopener">Blocks by Blockly</a></p>
+    </aside>
+  </div>
 </div>
 
 <script>
@@ -97,103 +133,133 @@ window.addEventListener('error', function (e) {
 <script src="https://cdn.jsdelivr.net/npm/blockly@12.5.1/javascript_compressed.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/blockly@12.5.1/msg/en.js"></script>
 <script src="nxt-lib.js"></script>
+<script src="wedo-lib.js"></script>
 <script>
+// Everything lives inside this function so its names can't clash with globals that
+// Web Bluetooth browsers such as Bluefy inject into the page.
 (function () {
 'use strict';
 const $ = sel => document.querySelector(sel);
-const sleep = NXTBrick.sleep;
+const sleep = ms => new Promise(res => setTimeout(res, ms));
 
 if (!window.Blockly || !window.javascript) {
   $('#statusText').textContent = "The block editor couldn't be downloaded. Check the internet connection and reload the page.";
   return;
 }
-let running = false;
-let robot = null;
+
+// ---------- Which kit ----------
+function chooseKit() {
+  const fromUrl = new URLSearchParams(location.search).get('kit');
+  if (fromUrl === 'wedo' || fromUrl === 'nxt') return fromUrl;
+  try { const saved = localStorage.getItem('codeKit'); if (saved === 'wedo' || saved === 'nxt') return saved; } catch (e) {}
+  return 'wedo';
+}
+const KIT = chooseKit();
+try { localStorage.setItem('codeKit', KIT); } catch (e) {}
+document.querySelector(`.kitswitch [data-kit="${KIT}"]`).setAttribute('aria-current', 'page');
+document.title = (KIT === 'nxt' ? 'NXT' : 'WeDo 2.0') + ' Block Coding';
+$('#remoteLink').href = KIT === 'nxt' ? 'nxt.html' : 'wedo.html';
+$('#remoteLink').textContent = KIT === 'nxt' ? 'NXT remote control and sensor setup' : 'WeDo remote control';
+$('#kitHelp').innerHTML = KIT === 'nxt'
+  ? 'Ports: motors are A, B, C; sensors are 1–4. On the standard 9797 robot, the wheels are B and C. The brick must stay connected while a program runs.'
+  : 'Motors and sensors plug into ports 1 and 2 on the Smart Hub. The hub reports what is plugged in, so sensor blocks find the sensor by themselves. On iPhone and iPad, use the free Bluefy browser. ' +
+    '<a href="#" id="showAll">Hub not in the list? Show all Bluetooth devices</a>';
+
 const gen = javascript.javascriptGenerator;
 const Order = javascript.Order;
+let running = false;
+let robot = null;
 
-// ---------- Block definitions ----------
-const C = { events: '#FFBF00', motors: '#4C97FF', sensors: '#5CB1D6', sound: '#CF63CF', control: '#FFAB19' };
-const MOTOR_PORTS = [['A', 'A'], ['B', 'B'], ['C', 'C'], ['B + C', 'BC'], ['A + B + C', 'ABC']];
-const ONE_MOTOR = [['A', 'A'], ['B', 'B'], ['C', 'C']];
-const SENSOR_PORTS = [['1', '1'], ['2', '2'], ['3', '3'], ['4', '4']];
+// ---------- Blocks shared by both kits ----------
+// (The shared blocks keep their original nxt_ names so programs saved earlier still open.)
+const C = { events: '#FFBF00', motors: '#4C97FF', sensors: '#5CB1D6', sound: '#CF63CF', control: '#FFAB19', hub: '#0FBD8C' };
 const DIRECTIONS = [['forward', '1'], ['backward', '-1']];
 const stmt = { previousStatement: null, nextStatement: null, inputsInline: true };
 
 Blockly.common.defineBlocksWithJsonArray([
   { type: 'nxt_start', message0: 'when ▶ Run is clicked', nextStatement: null, colour: C.events, style: { hat: 'cap' },
     tooltip: 'Blocks attached below this run when you press Run.' },
-
-  { type: 'nxt_motor_on', ...stmt, colour: C.motors,
-    message0: 'motor %1 %2 at speed %3 %%',
-    args0: [{ type: 'field_dropdown', name: 'PORTS', options: MOTOR_PORTS },
-            { type: 'field_dropdown', name: 'DIR', options: DIRECTIONS },
-            { type: 'input_value', name: 'SPEED', check: 'Number' }],
-    tooltip: 'Start the motor and keep it running. Speed is 0 to 100.' },
-  { type: 'nxt_motor_for', ...stmt, colour: C.motors,
-    message0: 'motor %1 %2 at speed %3 %% for %4 %5',
-    args0: [{ type: 'field_dropdown', name: 'PORTS', options: MOTOR_PORTS },
-            { type: 'field_dropdown', name: 'DIR', options: DIRECTIONS },
-            { type: 'input_value', name: 'SPEED', check: 'Number' },
-            { type: 'input_value', name: 'AMOUNT', check: 'Number' },
-            { type: 'field_dropdown', name: 'UNIT', options: [['seconds', 'seconds'], ['rotations', 'rotations'], ['degrees', 'degrees']] }],
-    tooltip: 'Run the motor for a time or a number of turns, then stop. The program waits until it has finished.' },
-  { type: 'nxt_motor_stop', ...stmt, colour: C.motors,
-    message0: 'stop motor %1',
-    args0: [{ type: 'field_dropdown', name: 'PORTS', options: [['A', 'A'], ['B', 'B'], ['C', 'C'], ['B + C', 'BC'], ['all', 'ABC']] }],
-    tooltip: 'Stop the motor.' },
-  { type: 'nxt_rotation', output: 'Number', colour: C.motors,
-    message0: 'motor %1 rotation (degrees)',
-    args0: [{ type: 'field_dropdown', name: 'PORT', options: ONE_MOTOR }],
-    tooltip: 'How many degrees the motor has turned since the program started or since its rotation was reset. 360 = one full turn.' },
-  { type: 'nxt_reset_rotation', ...stmt, colour: C.motors,
-    message0: 'reset rotation of motor %1',
-    args0: [{ type: 'field_dropdown', name: 'PORT', options: ONE_MOTOR }] },
-
-  { type: 'nxt_touch', output: 'Boolean', colour: C.sensors,
-    message0: 'touch sensor on port %1 pressed?',
-    args0: [{ type: 'field_dropdown', name: 'PORT', options: SENSOR_PORTS }],
-    tooltip: 'True while the touch sensor is pressed.' },
-  { type: 'nxt_wait_touch', ...stmt, colour: C.sensors,
-    message0: 'wait until touch sensor on port %1 is %2',
-    args0: [{ type: 'field_dropdown', name: 'PORT', options: SENSOR_PORTS },
-            { type: 'field_dropdown', name: 'STATE', options: [['pressed', '1'], ['released', '0']] }] },
-  { type: 'nxt_light', output: 'Number', colour: C.sensors,
-    message0: 'light level on port %1 lamp %2',
-    args0: [{ type: 'field_dropdown', name: 'PORT', options: SENSOR_PORTS },
-            { type: 'field_dropdown', name: 'LAMP', options: [['on', 'on'], ['off', 'off']] }],
-    tooltip: 'Brightness 0-100. Lamp on: light reflected from a surface (white is high, black is low). Lamp off: light in the room.' },
-  { type: 'nxt_sound', output: 'Number', colour: C.sensors,
-    message0: 'sound level on port %1',
-    args0: [{ type: 'field_dropdown', name: 'PORT', options: SENSOR_PORTS }],
-    tooltip: 'Loudness 0-100.' },
-  { type: 'nxt_distance', output: 'Number', colour: C.sensors,
-    message0: 'distance (cm) on port %1',
-    args0: [{ type: 'field_dropdown', name: 'PORT', options: SENSOR_PORTS }],
-    tooltip: 'Distance to the nearest object from the ultrasonic sensor, in cm. 255 means nothing in range.' },
   { type: 'nxt_timer', output: 'Number', colour: C.sensors, message0: 'timer (seconds)',
     tooltip: 'Seconds since the program started or the timer was reset.' },
   { type: 'nxt_reset_timer', ...stmt, colour: C.sensors, message0: 'reset timer' },
-
-  { type: 'nxt_beep', ...stmt, colour: C.sound,
-    message0: 'play tone %1 Hz for %2 seconds',
-    args0: [{ type: 'input_value', name: 'FREQ', check: 'Number' }, { type: 'input_value', name: 'SECS', check: 'Number' }],
-    tooltip: 'Play a note on the brick. 440 Hz is the note A; higher numbers are higher notes.' },
-  { type: 'nxt_say', ...stmt, colour: C.sound,
-    message0: 'show %1',
-    args0: [{ type: 'input_value', name: 'TEXT' }],
+  { type: 'nxt_say', ...stmt, colour: C.sound, message0: 'show %1', args0: [{ type: 'input_value', name: 'TEXT' }],
     tooltip: 'Show a value in the Output panel.' },
-
-  { type: 'nxt_wait', ...stmt, colour: C.control,
-    message0: 'wait %1 seconds',
-    args0: [{ type: 'input_value', name: 'SECS', check: 'Number' }] },
-  { type: 'nxt_wait_until', ...stmt, colour: C.control,
-    message0: 'wait until %1',
-    args0: [{ type: 'input_value', name: 'COND', check: 'Boolean' }] },
-  { type: 'nxt_forever', previousStatement: null, colour: C.control,
-    message0: 'forever %1 %2',
+  { type: 'nxt_wait', ...stmt, colour: C.control, message0: 'wait %1 seconds', args0: [{ type: 'input_value', name: 'SECS', check: 'Number' }] },
+  { type: 'nxt_wait_until', ...stmt, colour: C.control, message0: 'wait until %1', args0: [{ type: 'input_value', name: 'COND', check: 'Boolean' }] },
+  { type: 'nxt_forever', previousStatement: null, colour: C.control, message0: 'forever %1 %2',
     args0: [{ type: 'input_dummy' }, { type: 'input_statement', name: 'DO' }],
     tooltip: 'Repeat the blocks inside until the program is stopped.' },
+]);
+
+// ---------- NXT blocks ----------
+const NXT_MOTORS = [['A', 'A'], ['B', 'B'], ['C', 'C'], ['B + C', 'BC'], ['A + B + C', 'ABC']];
+const NXT_ONE_MOTOR = [['A', 'A'], ['B', 'B'], ['C', 'C']];
+const NXT_SENSOR_PORTS = [['1', '1'], ['2', '2'], ['3', '3'], ['4', '4']];
+Blockly.common.defineBlocksWithJsonArray([
+  { type: 'nxt_motor_on', ...stmt, colour: C.motors, message0: 'motor %1 %2 at speed %3 %%',
+    args0: [{ type: 'field_dropdown', name: 'PORTS', options: NXT_MOTORS }, { type: 'field_dropdown', name: 'DIR', options: DIRECTIONS },
+            { type: 'input_value', name: 'SPEED', check: 'Number' }],
+    tooltip: 'Start the motor and keep it running. Speed is 0 to 100.' },
+  { type: 'nxt_motor_for', ...stmt, colour: C.motors, message0: 'motor %1 %2 at speed %3 %% for %4 %5',
+    args0: [{ type: 'field_dropdown', name: 'PORTS', options: NXT_MOTORS }, { type: 'field_dropdown', name: 'DIR', options: DIRECTIONS },
+            { type: 'input_value', name: 'SPEED', check: 'Number' }, { type: 'input_value', name: 'AMOUNT', check: 'Number' },
+            { type: 'field_dropdown', name: 'UNIT', options: [['seconds', 'seconds'], ['rotations', 'rotations'], ['degrees', 'degrees']] }],
+    tooltip: 'Run the motor for a time or a number of turns, then stop. The program waits until it has finished.' },
+  { type: 'nxt_motor_stop', ...stmt, colour: C.motors, message0: 'stop motor %1',
+    args0: [{ type: 'field_dropdown', name: 'PORTS', options: [['A', 'A'], ['B', 'B'], ['C', 'C'], ['B + C', 'BC'], ['all', 'ABC']] }] },
+  { type: 'nxt_rotation', output: 'Number', colour: C.motors, message0: 'motor %1 rotation (degrees)',
+    args0: [{ type: 'field_dropdown', name: 'PORT', options: NXT_ONE_MOTOR }],
+    tooltip: 'How many degrees the motor has turned since the program started or its rotation was reset. 360 = one full turn.' },
+  { type: 'nxt_reset_rotation', ...stmt, colour: C.motors, message0: 'reset rotation of motor %1',
+    args0: [{ type: 'field_dropdown', name: 'PORT', options: NXT_ONE_MOTOR }] },
+  { type: 'nxt_touch', output: 'Boolean', colour: C.sensors, message0: 'touch sensor on port %1 pressed?',
+    args0: [{ type: 'field_dropdown', name: 'PORT', options: NXT_SENSOR_PORTS }] },
+  { type: 'nxt_wait_touch', ...stmt, colour: C.sensors, message0: 'wait until touch sensor on port %1 is %2',
+    args0: [{ type: 'field_dropdown', name: 'PORT', options: NXT_SENSOR_PORTS }, { type: 'field_dropdown', name: 'STATE', options: [['pressed', '1'], ['released', '0']] }] },
+  { type: 'nxt_light', output: 'Number', colour: C.sensors, message0: 'light level on port %1 lamp %2',
+    args0: [{ type: 'field_dropdown', name: 'PORT', options: NXT_SENSOR_PORTS }, { type: 'field_dropdown', name: 'LAMP', options: [['on', 'on'], ['off', 'off']] }],
+    tooltip: 'Brightness 0-100. Lamp on: light reflected from a surface (white is high, black is low). Lamp off: light in the room.' },
+  { type: 'nxt_sound', output: 'Number', colour: C.sensors, message0: 'sound level on port %1',
+    args0: [{ type: 'field_dropdown', name: 'PORT', options: NXT_SENSOR_PORTS }], tooltip: 'Loudness 0-100.' },
+  { type: 'nxt_distance', output: 'Number', colour: C.sensors, message0: 'distance (cm) on port %1',
+    args0: [{ type: 'field_dropdown', name: 'PORT', options: NXT_SENSOR_PORTS }],
+    tooltip: 'Distance to the nearest object from the ultrasonic sensor, in cm. 255 means nothing in range.' },
+  { type: 'nxt_beep', ...stmt, colour: C.sound, message0: 'play tone %1 Hz for %2 seconds',
+    args0: [{ type: 'input_value', name: 'FREQ', check: 'Number' }, { type: 'input_value', name: 'SECS', check: 'Number' }],
+    tooltip: 'Play a note on the brick. 440 Hz is the note A; higher numbers are higher notes.' },
+]);
+
+// ---------- WeDo 2.0 blocks ----------
+const WEDO_MOTORS = [['1', '1'], ['2', '2'], ['1 + 2', '12']];
+const TILT_DIRS = [['up', 'up'], ['down', 'down'], ['left', 'left'], ['right', 'right']];
+Blockly.common.defineBlocksWithJsonArray([
+  { type: 'wedo_motor_on', ...stmt, colour: C.motors, message0: 'motor %1 %2 at speed %3 %%',
+    args0: [{ type: 'field_dropdown', name: 'PORTS', options: WEDO_MOTORS }, { type: 'field_dropdown', name: 'DIR', options: DIRECTIONS },
+            { type: 'input_value', name: 'SPEED', check: 'Number' }],
+    tooltip: 'Start the motor on hub port 1 or 2 and keep it running. Speed is 0 to 100.' },
+  { type: 'wedo_motor_for', ...stmt, colour: C.motors, message0: 'motor %1 %2 at speed %3 %% for %4 seconds',
+    args0: [{ type: 'field_dropdown', name: 'PORTS', options: WEDO_MOTORS }, { type: 'field_dropdown', name: 'DIR', options: DIRECTIONS },
+            { type: 'input_value', name: 'SPEED', check: 'Number' }, { type: 'input_value', name: 'SECS', check: 'Number' }],
+    tooltip: 'Run the motor for a number of seconds, then stop. The program waits until it has finished.' },
+  { type: 'wedo_motor_stop', ...stmt, colour: C.motors, message0: 'stop motor %1',
+    args0: [{ type: 'field_dropdown', name: 'PORTS', options: [['1', '1'], ['2', '2'], ['all', '12']] }] },
+  { type: 'wedo_light', ...stmt, colour: C.hub, message0: 'set hub light to %1',
+    args0: [{ type: 'field_dropdown', name: 'COLOUR', options: WeDoHub.COLORS.map(c => [c[0].toLowerCase(), c[0]]) }] },
+  { type: 'wedo_beep', ...stmt, colour: C.sound, message0: 'play tone %1 Hz for %2 seconds',
+    args0: [{ type: 'input_value', name: 'FREQ', check: 'Number' }, { type: 'input_value', name: 'SECS', check: 'Number' }],
+    tooltip: "Play a note on the hub's beeper (100-1500 Hz). 440 Hz is the note A." },
+  { type: 'wedo_button', output: 'Boolean', colour: C.hub, message0: 'hub button pressed?',
+    tooltip: 'True while the green button on the hub is pressed.' },
+  { type: 'wedo_wait_button', ...stmt, colour: C.hub, message0: 'wait until hub button is %1',
+    args0: [{ type: 'field_dropdown', name: 'STATE', options: [['pressed', '1'], ['released', '0']] }] },
+  { type: 'wedo_distance', output: 'Number', colour: C.sensors, message0: 'motion sensor distance',
+    tooltip: 'From the motion sensor: 0 when something is very close, up to 100 when nothing is near.' },
+  { type: 'wedo_tilted', output: 'Boolean', colour: C.sensors, message0: 'tilted %1 ?',
+    args0: [{ type: 'field_dropdown', name: 'DIR', options: [['any way', 'any']].concat(TILT_DIRS) }],
+    tooltip: 'True when the tilt sensor is tipped that way.' },
+  { type: 'wedo_tilt_angle', output: 'Number', colour: C.sensors, message0: 'tilt angle %1',
+    args0: [{ type: 'field_dropdown', name: 'DIR', options: TILT_DIRS }],
+    tooltip: 'How far the tilt sensor is tipped that way, in degrees.' },
 ]);
 
 // ---------- Code generators ----------
@@ -202,12 +268,18 @@ Blockly.common.defineBlocksWithJsonArray([
 gen.STATEMENT_PREFIX = 'await robot.step(%1);\n';
 gen.INFINITE_LOOP_TRAP = 'await robot.poll();\n';
 gen.addReservedWords('robot,__threads');
-
 const num = (b, name, dflt) => gen.valueToCode(b, name, Order.NONE) || dflt;
 const str = s => JSON.stringify(s);
 const F = gen.forBlock;
 
 F.nxt_start = () => '';
+F.nxt_timer = () => ['robot.timer()', Order.FUNCTION_CALL];
+F.nxt_reset_timer = () => 'robot.resetTimer();\n';
+F.nxt_say = b => `robot.say(${gen.valueToCode(b, 'TEXT', Order.NONE) || "''"});\n`;
+F.nxt_wait = b => `await robot.wait(${num(b, 'SECS', '1')});\n`;
+F.nxt_wait_until = b => `while (!(${gen.valueToCode(b, 'COND', Order.NONE) || 'false'})) {\n  await robot.poll();\n}\n`;
+F.nxt_forever = b => `while (true) {\n${gen.statementToCode(b, 'DO')}  await robot.poll();\n}\n`;
+
 F.nxt_motor_on = b => `await robot.motorOn(${str(b.getFieldValue('PORTS'))}, ${b.getFieldValue('DIR')}, ${num(b, 'SPEED', '50')});\n`;
 F.nxt_motor_for = b => `await robot.motorFor(${str(b.getFieldValue('PORTS'))}, ${b.getFieldValue('DIR')}, ${num(b, 'SPEED', '50')}, ${num(b, 'AMOUNT', '1')}, ${str(b.getFieldValue('UNIT'))});\n`;
 F.nxt_motor_stop = b => `await robot.stop(${str(b.getFieldValue('PORTS'))});\n`;
@@ -218,38 +290,22 @@ F.nxt_wait_touch = b => `while ((await robot.touch(${b.getFieldValue('PORT')})) 
 F.nxt_light = b => [`(await robot.light(${b.getFieldValue('PORT')}, ${b.getFieldValue('LAMP') === 'on'}))`, Order.ATOMIC];
 F.nxt_sound = b => [`(await robot.sound(${b.getFieldValue('PORT')}))`, Order.ATOMIC];
 F.nxt_distance = b => [`(await robot.distance(${b.getFieldValue('PORT')}))`, Order.ATOMIC];
-F.nxt_timer = () => ['robot.timer()', Order.FUNCTION_CALL];
-F.nxt_reset_timer = () => 'robot.resetTimer();\n';
 F.nxt_beep = b => `await robot.beep(${num(b, 'FREQ', '440')}, ${num(b, 'SECS', '0.5')});\n`;
-F.nxt_say = b => `robot.say(${gen.valueToCode(b, 'TEXT', Order.NONE) || "''"});\n`;
-F.nxt_wait = b => `await robot.wait(${num(b, 'SECS', '1')});\n`;
-F.nxt_wait_until = b => `while (!(${gen.valueToCode(b, 'COND', Order.NONE) || 'false'})) {\n  await robot.poll();\n}\n`;
-F.nxt_forever = b => `while (true) {\n${gen.statementToCode(b, 'DO')}  await robot.poll();\n}\n`;
+
+F.wedo_motor_on = b => `await robot.motorOn(${str(b.getFieldValue('PORTS'))}, ${b.getFieldValue('DIR')}, ${num(b, 'SPEED', '50')});\n`;
+F.wedo_motor_for = b => `await robot.motorFor(${str(b.getFieldValue('PORTS'))}, ${b.getFieldValue('DIR')}, ${num(b, 'SPEED', '50')}, ${num(b, 'SECS', '1')});\n`;
+F.wedo_motor_stop = b => `await robot.stop(${str(b.getFieldValue('PORTS'))});\n`;
+F.wedo_light = b => `await robot.light(${str(b.getFieldValue('COLOUR'))});\n`;
+F.wedo_beep = b => `await robot.beep(${num(b, 'FREQ', '440')}, ${num(b, 'SECS', '0.5')});\n`;
+F.wedo_button = () => ['robot.button()', Order.FUNCTION_CALL];
+F.wedo_wait_button = b => `while (robot.button() !== ${b.getFieldValue('STATE') === '1'}) {\n  await robot.poll();\n}\n`;
+F.wedo_distance = () => ['robot.distance()', Order.FUNCTION_CALL];
+F.wedo_tilted = b => [`robot.tilted(${str(b.getFieldValue('DIR'))})`, Order.FUNCTION_CALL];
+F.wedo_tilt_angle = b => [`robot.tiltAngle(${str(b.getFieldValue('DIR'))})`, Order.FUNCTION_CALL];
 
 // ---------- Toolbox ----------
 const shadowNum = n => ({ shadow: { type: 'math_number', fields: { NUM: n } } });
-const toolbox = { kind: 'categoryToolbox', contents: [
-  { kind: 'category', name: 'Start', colour: C.events, contents: [{ kind: 'block', type: 'nxt_start' }] },
-  { kind: 'category', name: 'Motors', colour: C.motors, contents: [
-    { kind: 'block', type: 'nxt_motor_on', fields: { PORTS: 'BC' }, inputs: { SPEED: shadowNum(50) } },
-    { kind: 'block', type: 'nxt_motor_for', fields: { PORTS: 'BC' }, inputs: { SPEED: shadowNum(50), AMOUNT: shadowNum(1) } },
-    { kind: 'block', type: 'nxt_motor_stop', fields: { PORTS: 'BC' } },
-    { kind: 'block', type: 'nxt_rotation', fields: { PORT: 'B' } },
-    { kind: 'block', type: 'nxt_reset_rotation', fields: { PORT: 'B' } },
-  ] },
-  { kind: 'category', name: 'Sensors', colour: C.sensors, contents: [
-    { kind: 'block', type: 'nxt_touch', fields: { PORT: '1' } },
-    { kind: 'block', type: 'nxt_wait_touch', fields: { PORT: '1' } },
-    { kind: 'block', type: 'nxt_sound', fields: { PORT: '2' } },
-    { kind: 'block', type: 'nxt_light', fields: { PORT: '3' } },
-    { kind: 'block', type: 'nxt_distance', fields: { PORT: '4' } },
-    { kind: 'block', type: 'nxt_timer' },
-    { kind: 'block', type: 'nxt_reset_timer' },
-  ] },
-  { kind: 'category', name: 'Sound & Show', colour: C.sound, contents: [
-    { kind: 'block', type: 'nxt_beep', inputs: { FREQ: shadowNum(440), SECS: shadowNum(0.5) } },
-    { kind: 'block', type: 'nxt_say', inputs: { TEXT: { shadow: { type: 'text', fields: { TEXT: 'Hello!' } } } } },
-  ] },
+const sharedCategories = [
   { kind: 'category', name: 'Control', colour: C.control, contents: [
     { kind: 'block', type: 'nxt_wait', inputs: { SECS: shadowNum(1) } },
     { kind: 'block', type: 'nxt_wait_until' },
@@ -272,13 +328,59 @@ const toolbox = { kind: 'categoryToolbox', contents: [
     { kind: 'block', type: 'text_join' },
   ] },
   { kind: 'category', name: 'Variables', colour: '#FF8C1A', custom: 'VARIABLE' },
-] };
+];
+const showBlock = { kind: 'block', type: 'nxt_say', inputs: { TEXT: { shadow: { type: 'text', fields: { TEXT: 'Hello!' } } } } };
+const kitCategories = KIT === 'nxt' ? [
+  { kind: 'category', name: 'Start', colour: C.events, contents: [{ kind: 'block', type: 'nxt_start' }] },
+  { kind: 'category', name: 'Motors', colour: C.motors, contents: [
+    { kind: 'block', type: 'nxt_motor_on', fields: { PORTS: 'BC' }, inputs: { SPEED: shadowNum(50) } },
+    { kind: 'block', type: 'nxt_motor_for', fields: { PORTS: 'BC' }, inputs: { SPEED: shadowNum(50), AMOUNT: shadowNum(1) } },
+    { kind: 'block', type: 'nxt_motor_stop', fields: { PORTS: 'BC' } },
+    { kind: 'block', type: 'nxt_rotation', fields: { PORT: 'B' } },
+    { kind: 'block', type: 'nxt_reset_rotation', fields: { PORT: 'B' } },
+  ] },
+  { kind: 'category', name: 'Sensors', colour: C.sensors, contents: [
+    { kind: 'block', type: 'nxt_touch', fields: { PORT: '1' } },
+    { kind: 'block', type: 'nxt_wait_touch', fields: { PORT: '1' } },
+    { kind: 'block', type: 'nxt_sound', fields: { PORT: '2' } },
+    { kind: 'block', type: 'nxt_light', fields: { PORT: '3' } },
+    { kind: 'block', type: 'nxt_distance', fields: { PORT: '4' } },
+    { kind: 'block', type: 'nxt_timer' },
+    { kind: 'block', type: 'nxt_reset_timer' },
+  ] },
+  { kind: 'category', name: 'Sound & Show', colour: C.sound, contents: [
+    { kind: 'block', type: 'nxt_beep', inputs: { FREQ: shadowNum(440), SECS: shadowNum(0.5) } }, showBlock,
+  ] },
+] : [
+  { kind: 'category', name: 'Start', colour: C.events, contents: [{ kind: 'block', type: 'nxt_start' }] },
+  { kind: 'category', name: 'Motors', colour: C.motors, contents: [
+    { kind: 'block', type: 'wedo_motor_on', inputs: { SPEED: shadowNum(50) } },
+    { kind: 'block', type: 'wedo_motor_for', inputs: { SPEED: shadowNum(50), SECS: shadowNum(1) } },
+    { kind: 'block', type: 'wedo_motor_stop' },
+  ] },
+  { kind: 'category', name: 'Hub', colour: C.hub, contents: [
+    { kind: 'block', type: 'wedo_light', fields: { COLOUR: 'Green' } },
+    { kind: 'block', type: 'wedo_button' },
+    { kind: 'block', type: 'wedo_wait_button' },
+  ] },
+  { kind: 'category', name: 'Sensors', colour: C.sensors, contents: [
+    { kind: 'block', type: 'wedo_distance' },
+    { kind: 'block', type: 'wedo_tilted' },
+    { kind: 'block', type: 'wedo_tilt_angle' },
+    { kind: 'block', type: 'nxt_timer' },
+    { kind: 'block', type: 'nxt_reset_timer' },
+  ] },
+  { kind: 'category', name: 'Sound & Show', colour: C.sound, contents: [
+    { kind: 'block', type: 'wedo_beep', inputs: { FREQ: shadowNum(440), SECS: shadowNum(0.5) } }, showBlock,
+  ] },
+];
 
+const small = window.innerWidth < 700;
 const workspace = Blockly.inject('workspace', {
-  toolbox,
+  toolbox: { kind: 'categoryToolbox', contents: kitCategories.concat(sharedCategories) },
   media: 'https://cdn.jsdelivr.net/npm/blockly@12.5.1/media/',
   trashcan: true,
-  zoom: { controls: true, wheel: true, startScale: 0.9 },
+  zoom: { controls: true, wheel: true, pinch: true, startScale: small ? 0.75 : 0.9 },
   move: { scrollbars: true, drag: true, wheel: true },
   grid: { spacing: 24, length: 3, colour: '#e0e0e8', snap: true },
 });
@@ -297,41 +399,51 @@ const program = (body, variables) => ({
   ...(variables ? { variables } : {}),
 });
 const compare = (op, a, b) => blk('logic_compare', { OP: op }, { A: inner(a), B: N(b) });
-const motorOn = (ports, dir, speed) => blk('nxt_motor_on', { PORTS: ports, DIR: String(dir) }, { SPEED: N(speed) });
-const motorFor = (ports, dir, speed, amt, unit) => blk('nxt_motor_for', { PORTS: ports, DIR: String(dir), UNIT: unit }, { SPEED: N(speed), AMOUNT: N(amt) });
-const beep = (f, s) => blk('nxt_beep', null, { FREQ: N(f), SECS: N(s) });
+const say = text => blk('nxt_say', null, { TEXT: inner(blk('text', { TEXT: text })) });
 const forever = (...body) => blk('nxt_forever', null, { DO: inner(seq(...body)) });
+const wait = s => blk('nxt_wait', null, { SECS: N(s) });
 
-const EXAMPLES = {
+const nxtOn = (ports, dir, speed) => blk('nxt_motor_on', { PORTS: ports, DIR: String(dir) }, { SPEED: N(speed) });
+const nxtFor = (ports, dir, speed, amt, unit) => blk('nxt_motor_for', { PORTS: ports, DIR: String(dir), UNIT: unit }, { SPEED: N(speed), AMOUNT: N(amt) });
+const nxtBeep = (f, s) => blk('nxt_beep', null, { FREQ: N(f), SECS: N(s) });
+
+const wedoOn = (ports, dir, speed) => blk('wedo_motor_on', { PORTS: ports, DIR: String(dir) }, { SPEED: N(speed) });
+const wedoFor = (ports, dir, speed, secs) => blk('wedo_motor_for', { PORTS: ports, DIR: String(dir) }, { SPEED: N(speed), SECS: N(secs) });
+const wedoStop = ports => blk('wedo_motor_stop', { PORTS: ports });
+const light = colour => blk('wedo_light', { COLOUR: colour });
+const wedoBeep = (f, s) => blk('wedo_beep', null, { FREQ: N(f), SECS: N(s) });
+const waitButton = pressed => blk('wedo_wait_button', { STATE: pressed ? '1' : '0' });
+
+const EXAMPLES = KIT === 'nxt' ? {
   'Drive until close to a wall': program([
-    motorOn('BC', 1, 50),
+    nxtOn('BC', 1, 50),
     blk('nxt_wait_until', null, { COND: inner(compare('LT', blk('nxt_distance', { PORT: '4' }), 20)) }),
     blk('nxt_motor_stop', { PORTS: 'BC' }),
-    beep(880, 0.5),
+    nxtBeep(880, 0.5),
   ]),
   'Bump and turn': program([
     forever(
-      motorOn('BC', 1, 50),
+      nxtOn('BC', 1, 50),
       blk('nxt_wait_touch', { PORT: '1', STATE: '1' }),
-      motorFor('BC', -1, 50, 1, 'seconds'),
-      motorFor('B', 1, 50, 1, 'rotations'),
+      nxtFor('BC', -1, 50, 1, 'seconds'),
+      nxtFor('B', 1, 50, 1, 'rotations'),
     ),
   ]),
   'Line follower': program([
-    blk('nxt_say', null, { TEXT: inner(blk('text', { TEXT: 'Change 45 to halfway between your black and white readings.' })) }),
+    say('Change 45 to halfway between your black and white readings.'),
     forever(
       blk('controls_if', null, {
         IF0: inner(compare('LT', blk('nxt_light', { PORT: '3', LAMP: 'on' }), 45)),
-        DO0: inner(seq(motorOn('B', 1, 40), motorOn('C', 1, 10))),
-        ELSE: inner(seq(motorOn('B', 1, 10), motorOn('C', 1, 40))),
+        DO0: inner(seq(nxtOn('B', 1, 40), nxtOn('C', 1, 10))),
+        ELSE: inner(seq(nxtOn('B', 1, 10), nxtOn('C', 1, 40))),
       }, { extraState: { hasElse: true } }),
     ),
   ]),
   'Clap to start': program([
-    blk('nxt_say', null, { TEXT: inner(blk('text', { TEXT: 'Clap!' })) }),
+    say('Clap!'),
     blk('nxt_wait_until', null, { COND: inner(compare('GT', blk('nxt_sound', { PORT: '2' }), 60)) }),
-    motorFor('BC', 1, 60, 2, 'seconds'),
-    beep(660, 0.3),
+    nxtFor('BC', 1, 60, 2, 'seconds'),
+    nxtBeep(660, 0.3),
   ]),
   'Count touches': program([
     blk('variables_set', { VAR: { id: 'count' } }, { VALUE: inner(blk('math_number', { NUM: 0 })) }),
@@ -342,10 +454,62 @@ const EXAMPLES = {
         ADD0: inner(blk('text', { TEXT: 'Presses: ' })),
         ADD1: inner(blk('variables_get', { VAR: { id: 'count' } })),
       }, { extraState: { itemCount: 2 } })) }),
-      beep(1320, 0.1),
+      nxtBeep(1320, 0.1),
       blk('nxt_wait_touch', { PORT: '1', STATE: '0' }),
     ),
   ], [{ name: 'count', id: 'count' }]),
+} : {
+  'Spin, light and beep': program([
+    light('Green'),
+    wedoFor('1', 1, 60, 2),
+    light('Red'),
+    wedoBeep(880, 0.3),
+  ]),
+  'Back and forth': program([
+    blk('controls_repeat_ext', null, { TIMES: N(3), DO: inner(seq(
+      wedoFor('1', 1, 50, 1),
+      wedoFor('1', -1, 50, 1),
+      wedoBeep(660, 0.2),
+    )) }),
+  ]),
+  'Traffic light': program([
+    forever(
+      light('Green'), wait(3),
+      light('Yellow'), wait(1),
+      light('Red'), wait(3),
+    ),
+  ]),
+  'Button turns motor on and off': program([
+    light('Red'),
+    forever(
+      waitButton(true), waitButton(false),
+      wedoOn('1', 1, 70), light('Green'),
+      waitButton(true), waitButton(false),
+      wedoStop('1'), light('Red'),
+    ),
+  ]),
+  'Speed up': program([
+    blk('variables_set', { VAR: { id: 'speed' } }, { VALUE: inner(blk('math_number', { NUM: 10 })) }),
+    blk('controls_repeat_ext', null, { TIMES: N(10), DO: inner(seq(
+      blk('wedo_motor_on', { PORTS: '1', DIR: '1' }, { SPEED: { shadow: N(50).shadow, block: blk('variables_get', { VAR: { id: 'speed' } }) } }),
+      blk('nxt_say', null, { TEXT: inner(blk('text_join', null, {
+        ADD0: inner(blk('text', { TEXT: 'Speed: ' })),
+        ADD1: inner(blk('variables_get', { VAR: { id: 'speed' } })),
+      }, { extraState: { itemCount: 2 } })) }),
+      blk('math_change', { VAR: { id: 'speed' } }, { DELTA: N(10) }),
+      wait(0.5),
+    )) }),
+    wedoStop('12'),
+  ], [{ name: 'speed', id: 'speed' }]),
+  'Motion alarm (needs motion sensor)': program([
+    forever(
+      blk('controls_if', null, {
+        IF0: inner(compare('LT', blk('wedo_distance'), 50)),
+        DO0: inner(seq(light('Red'), wedoBeep(1000, 0.2))),
+        ELSE: inner(light('Green')),
+      }, { extraState: { hasElse: true } }),
+    ),
+  ]),
 };
 Object.keys(EXAMPLES).forEach(name => {
   const o = document.createElement('option');
@@ -363,7 +527,7 @@ function loadProgram(json) {
 const isEmpty = () => workspace.getAllBlocks(false).length === 0;
 
 // ---------- Saving ----------
-const STORE_KEY = 'nxtProgram';
+const STORE_KEY = KIT === 'nxt' ? 'nxtProgram' : 'wedoProgram';
 function saveLocal() {
   try { localStorage.setItem(STORE_KEY, JSON.stringify(Blockly.serialization.workspaces.save(workspace))); } catch (e) {}
 }
@@ -391,24 +555,37 @@ $('#examples').addEventListener('change', () => {
   loadProgram(EXAMPLES[name]);
 });
 $('#newBtn').addEventListener('click', () => {
-  if (!isEmpty() && !confirm('Start a new program? Your current one will be cleared (use Download first to keep it).')) return;
+  if (!isEmpty() && !confirm('Start a new program? Your current one will be cleared (use Save first to keep it).')) return;
   loadProgram(program([]));
 });
 $('#saveBtn').addEventListener('click', () => {
-  const data = JSON.stringify(Blockly.serialization.workspaces.save(workspace), null, 2);
+  const data = JSON.stringify(Object.assign({ kit: KIT }, Blockly.serialization.workspaces.save(workspace)), null, 2);
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
-  a.download = 'nxt-program.json';
+  a.download = KIT + '-program.json';
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 });
 $('#openBtn').addEventListener('click', () => $('#fileInput').click());
+$('#fileMenu').addEventListener('change', () => {
+  const choice = $('#fileMenu').value;
+  $('#fileMenu').value = '';
+  if (choice) $('#' + choice + 'Btn').click();
+});
 $('#fileInput').addEventListener('change', async () => {
   const file = $('#fileInput').files[0];
   $('#fileInput').value = '';
   if (!file) return;
-  try { loadProgram(JSON.parse(await file.text())); out('Opened ' + file.name); }
-  catch (e) { out("Couldn't open " + file.name + ': ' + e.message, true); }
+  try {
+    const json = JSON.parse(await file.text());
+    if (json.kit && json.kit !== KIT) {
+      out(`${file.name} is a ${json.kit === 'nxt' ? 'NXT' : 'WeDo 2.0'} program. Switch kits at the top, then open it again.`, true);
+      return;
+    }
+    delete json.kit;
+    loadProgram(json);
+    out('Opened ' + file.name);
+  } catch (e) { out("Couldn't open " + file.name + ': ' + e.message, true); }
 });
 
 // ---------- Output and readings ----------
@@ -434,9 +611,13 @@ function showReading(key, label, value) {
   readingEls[key].textContent = value;
 }
 
+// ---------- The connected device ----------
+const device = KIT === 'nxt'
+  ? new NXTBrick({ log: msg => console.log(msg), onDisconnect: onDisconnected })
+  : new WeDoHub({ log: msg => console.log(msg), onDisconnect: onDisconnected });
+
 // ---------- Running programs ----------
 class StopSignal extends Error {}
-const brick = new NXTBrick({ log: msg => console.log(msg), onDisconnect: onDisconnected });
 
 // Builds the JavaScript for everything attached under the Run blocks. Several Run blocks run at the same time.
 function buildCode() {
@@ -446,14 +627,16 @@ function buildCode() {
   return gen.finish(bodies.join(''));
 }
 
+// What every program can do, whichever kit it runs on.
 function makeRobot() {
-  const sensorMode = [null, null, null, null];
-  const rotationOffset = [0, 0, 0];
   let timerStart = performance.now();
   let steps = 0;
   const r = {
     stopped: false,
-    check() { if (r.stopped) throw new StopSignal(); if (!brick.connected) throw new Error('The brick was disconnected.'); },
+    check() {
+      if (r.stopped) throw new StopSignal();
+      if (!device.connected) throw new Error(KIT === 'nxt' ? 'The brick was disconnected.' : 'The hub was disconnected.');
+    },
     async step(id) {
       r.check();
       workspace.highlightBlock(id);
@@ -465,108 +648,170 @@ function makeRobot() {
       while (performance.now() < end) { r.check(); await sleep(Math.min(50, end - performance.now())); }
       r.check();
     },
-    ports: s => Array.from(String(s)).map(ch => 'ABC'.indexOf(ch)).filter(i => i >= 0),
     speed: v => Math.max(0, Math.min(100, Number(v) || 0)),
+    timer: () => Math.round((performance.now() - timerStart) / 10) / 100,
+    resetTimer() { timerStart = performance.now(); },
+    say(v) { out(String(v)); },
+  };
+  return Object.assign(r, KIT === 'nxt' ? nxtRobot(r) : wedoRobot(r));
+}
 
-    async motorOn(ports, dir, speed) {
+function wedoRobot(r) {
+  const ports = s => Array.from(String(s)).map(Number).filter(p => p === 1 || p === 2);
+  const need = (type, what) => {
+    r.check();
+    if (!device.hasSensor(type)) throw new Error(`No ${what} is plugged into the hub. Plug one into port 1 or 2.`);
+  };
+  return {
+    async motorOn(p, dir, speed) {
       r.check();
-      for (const p of r.ports(ports)) brick.setMotor(p, dir * r.speed(speed));
+      ports(p).forEach(port => device.setMotor(port, dir * r.speed(speed)));
     },
-    async stop(ports) {
+    async stop(p) {
       r.check();
-      const list = r.ports(ports);
-      list.forEach(p => brick.brakeMotor(p));
+      ports(p).forEach(port => device.setMotor(port, 0));
+    },
+    async motorFor(p, dir, speed, secs) {
+      await r.motorOn(p, dir, speed);
+      try { await r.wait(secs); }
+      finally { ports(p).forEach(port => device.setMotor(port, 0)); }
+    },
+    async light(name) {
+      r.check();
+      const c = WeDoHub.COLORS.find(x => x[0] === name) || WeDoHub.COLORS[0];
+      device.setLed(c[1], c[2], c[3]);
+    },
+    async beep(freq, secs) {
+      r.check();
+      const ms = Math.max(0, Number(secs) || 0) * 1000;
+      device.playTone(freq, ms);
+      await r.wait(ms / 1000);
+    },
+    button() {
+      r.check();
+      showReading('button', 'Hub button', device.buttonPressed ? 'pressed' : 'released');
+      return device.buttonPressed;
+    },
+    distance() {
+      need(WeDoHub.TYPE.MOTION, 'motion sensor');
+      const d = device.distance === null ? 100 : device.distance;
+      showReading('distance', 'Motion sensor', d);
+      return d;
+    },
+    tilted(dir) {
+      need(WeDoHub.TYPE.TILT, 'tilt sensor');
+      const v = device.isTilted(dir);
+      showReading('tilt-' + dir, 'Tilted ' + (dir === 'any' ? 'any way' : dir), v ? 'yes' : 'no');
+      return v;
+    },
+    tiltAngle(dir) {
+      need(WeDoHub.TYPE.TILT, 'tilt sensor');
+      const v = device.tiltAngle(dir) || 0;
+      showReading('angle-' + dir, 'Tilt angle ' + dir, v + '°');
+      return v;
+    },
+  };
+}
+
+function nxtRobot(r) {
+  const sensorMode = [null, null, null, null];
+  const rotationOffset = [0, 0, 0];
+  const ports = s => Array.from(String(s)).map(ch => 'ABC'.indexOf(ch)).filter(i => i >= 0);
+  const n = {
+    async motorOn(p, dir, speed) {
+      r.check();
+      for (const port of ports(p)) device.setMotor(port, dir * r.speed(speed));
+    },
+    async stop(p) {
+      r.check();
+      const list = ports(p);
+      list.forEach(port => device.brakeMotor(port));
       await sleep(150);
-      list.forEach(p => brick.setMotor(p, 0)); // stop holding, so the motors don't use battery
+      list.forEach(port => device.setMotor(port, 0)); // stop holding, so the motors don't use battery
     },
-    async motorFor(ports, dir, speed, amount, unit) {
-      const list = r.ports(ports);
+    async motorFor(p, dir, speed, amount, unit) {
+      const list = ports(p);
       amount = Math.max(0, Number(amount) || 0);
       if (unit === 'seconds') {
-        await r.motorOn(ports, dir, speed);
+        await n.motorOn(p, dir, speed);
         await r.wait(amount);
-        return r.stop(ports);
+        return n.stop(p);
       }
       const degrees = Math.round(unit === 'rotations' ? amount * 360 : amount);
       if (degrees === 0 || r.speed(speed) === 0) return;
       const start = [];
-      for (const p of list) start.push(await brick.readRotation(p));
+      for (const port of list) start.push(await device.readRotation(port));
       // The brick stops each motor itself after the given number of degrees; we watch until they have.
-      list.forEach(p => brick.setMotor(p, dir * r.speed(speed), degrees));
+      list.forEach(port => device.setMotor(port, dir * r.speed(speed), degrees));
       let last = start.slice(), lastChange = performance.now();
       for (;;) {
         await r.poll();
         const now = [];
-        for (const p of list) now.push(await brick.readRotation(p));
+        for (const port of list) now.push(await device.readRotation(port));
         if (now.every((v, i) => Math.abs(v - start[i]) >= degrees - 2)) break;
         if (now.some((v, i) => v !== last[i])) { last = now; lastChange = performance.now(); }
         else if (performance.now() - lastChange > 700) break; // stalled or already stopped
       }
-      list.forEach(p => brick.brakeMotor(p));
+      list.forEach(port => device.brakeMotor(port));
       await sleep(150);
-      list.forEach(p => brick.setMotor(p, 0));
+      list.forEach(port => device.setMotor(port, 0));
     },
     async rotation(port) {
       r.check();
       const i = 'ABC'.indexOf(port);
-      const v = (await brick.readRotation(i)) - rotationOffset[i];
+      const v = (await device.readRotation(i)) - rotationOffset[i];
       showReading('m' + port, 'Motor ' + port, v + '°');
       return v;
     },
     async resetRotation(port) {
       r.check();
       const i = 'ABC'.indexOf(port);
-      rotationOffset[i] = await brick.readRotation(i);
+      rotationOffset[i] = await device.readRotation(i);
     },
-
     // Sets the sensor type on a port the first time it's used (or when it changes).
     async sensor(port, kind) {
       r.check();
       const i = Number(port) - 1;
       if (sensorMode[i] !== kind) {
-        await brick.configureSensor(i, kind);
+        await device.configureSensor(i, kind);
         sensorMode[i] = kind;
         await sleep(kind === 'ultrasonic' ? 50 : 120); // let the reading settle
       }
-      return brick.readSensor(i, kind);
+      return device.readSensor(i, kind);
     },
     async touch(port) {
-      const v = !!(await r.sensor(port, 'touch'));
+      const v = !!(await n.sensor(port, 'touch'));
       showReading('s' + port, 'Port ' + port + ' touch', v ? 'pressed' : 'released');
       return v;
     },
     async light(port, lampOn) {
-      const v = (await r.sensor(port, lampOn ? 'lightOn' : 'lightOff')) || 0;
+      const v = (await n.sensor(port, lampOn ? 'lightOn' : 'lightOff')) || 0;
       showReading('s' + port, 'Port ' + port + ' light', v + '%');
       return v;
     },
     async sound(port) {
-      const v = (await r.sensor(port, 'sound')) || 0;
+      const v = (await n.sensor(port, 'sound')) || 0;
       showReading('s' + port, 'Port ' + port + ' sound', v + '%');
       return v;
     },
     async distance(port) {
-      const v = await r.sensor(port, 'ultrasonic');
+      const v = await n.sensor(port, 'ultrasonic');
       const d = v === null ? 255 : v;
       showReading('s' + port, 'Port ' + port + ' distance', d >= 255 ? 'nothing in range' : d + ' cm');
       return d;
     },
-    timer: () => Math.round((performance.now() - timerStart) / 10) / 100,
-    resetTimer() { timerStart = performance.now(); },
-
     async beep(freq, secs) {
       r.check();
       const ms = Math.max(0, Number(secs) || 0) * 1000;
-      brick.playTone(Number(freq) || 440, ms);
+      device.playTone(Number(freq) || 440, ms);
       await r.wait(ms / 1000);
     },
-    say(v) { out(String(v)); },
   };
-  return r;
+  return n;
 }
 
 async function run() {
-  if (running || !brick.connected) return;
+  if (running || !device.connected) return;
   const code = buildCode();
   if (!workspace.getTopBlocks(false).some(b => b.type === 'nxt_start')) {
     out('Add a "when ▶ Run is clicked" block (in Start) and attach your blocks under it.', true);
@@ -591,7 +836,7 @@ async function run() {
     robot.stopped = true; // ends any other Run block threads still going
     running = false;
     workspace.highlightBlock(null);
-    if (brick.connected) await brick.stopAll();
+    if (device.connected) await device.stopAll();
     setRunUi();
   }
 }
@@ -603,22 +848,36 @@ function setStatus(text, connected) {
   $('#dot').classList.toggle('on', connected);
 }
 function setRunUi() {
-  const c = brick.connected;
-  $('#usbBtn').hidden = $('#btBtn').hidden = c;
+  const c = device.connected;
+  $('#hubBtn').hidden = KIT !== 'wedo' || c;
+  $('#usbBtn').hidden = $('#btBtn').hidden = KIT !== 'nxt' || c;
   $('#disconnectBtn').hidden = !c;
   $('#runBtn').disabled = !c || running;
-  $('#runBtn').title = c ? '' : 'Connect the brick first';
+  $('#runBtn').title = c ? '' : 'Connect first';
   $('#stopBtn').disabled = !running;
 }
-async function connect(kind) {
+async function connectNxt(kind) {
   try {
     setStatus(kind === 'usb' ? 'Choose the NXT from the list…' : 'Choose the NXT (or its COM port) from the list…', false);
-    const name = await brick.connect(kind);
+    const name = await device.connect(kind);
     setStatus('Connected to ' + name, true);
-    brick.playTone(1320, 120);
+    device.playTone(1320, 120);
   } catch (err) {
     console.log('Connect failed:', err);
     setStatus(NXTBrick.explainError(err, kind) + ' Connection help is on the NXT remote page.', false);
+  }
+  setRunUi();
+}
+async function connectWedo(showAll) {
+  const problem = WeDoHub.bluetoothProblem();
+  if (problem) { setStatus(problem, false); return; }
+  try {
+    setStatus('Press the green button on the hub, then choose it from the list…', false);
+    const name = await device.connect(showAll);
+    setStatus('Connected to ' + name, true);
+  } catch (err) {
+    console.log('Connect failed:', err);
+    setStatus(err.name === 'NotFoundError' ? 'No hub chosen.' : 'Could not connect: ' + err.message, false);
   }
   setRunUi();
 }
@@ -630,24 +889,33 @@ function onDisconnected() {
 
 $('#runBtn').addEventListener('click', run);
 $('#stopBtn').addEventListener('click', stop);
-$('#usbBtn').addEventListener('click', () => connect('usb'));
-$('#btBtn').addEventListener('click', () => connect('bt'));
-$('#disconnectBtn').addEventListener('click', () => { stop(); brick.disconnect(); });
-window.addEventListener('pagehide', () => { stop(); if (brick.connected) { brick.stopAll(); brick.close(); } });
-// Safety: stop the program if the tab is hidden (tab switched, laptop closed).
-document.addEventListener('visibilitychange', () => { if (document.hidden && running) { stop(); out('Stopped because the tab was hidden.', true); } });
+$('#usbBtn').addEventListener('click', () => connectNxt('usb'));
+$('#btBtn').addEventListener('click', () => connectNxt('bt'));
+$('#hubBtn').addEventListener('click', () => connectWedo(false));
+if ($('#showAll')) $('#showAll').addEventListener('click', e => { e.preventDefault(); connectWedo(true); });
+$('#disconnectBtn').addEventListener('click', () => { stop(); device.disconnect(); });
+window.addEventListener('pagehide', () => {
+  stop();
+  if (device.connected) { device.stopAll(); if (KIT === 'nxt') device.close(); }
+});
+// Safety: stop the program if the tab is hidden (tab or app switched, phone locked, laptop closed).
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && running) { stop(); out('Stopped because the page was hidden.', true); }
+});
 
-if (!navigator.usb) $('#usbBtn').disabled = true;
-if (!navigator.serial) $('#btBtn').disabled = true;
-const problem = NXTBrick.unsupportedReason();
+const problem = KIT === 'nxt' ? NXTBrick.unsupportedReason() : WeDoHub.bluetoothProblem();
+if (KIT === 'nxt') {
+  if (!navigator.usb) $('#usbBtn').disabled = true;
+  if (!navigator.serial) $('#btBtn').disabled = true;
+}
 if (problem) {
   $('#noSupport').textContent = problem + ' You can still build programs here.';
   $('#noSupport').classList.add('show');
   setStatus('Not connected.', false);
 } else {
-  setStatus('Not connected. Turn the brick on, then connect.', false);
+  setStatus(KIT === 'nxt' ? 'Not connected. Turn the brick on, then connect.' : 'Not connected. Press the green button on the hub, then connect.', false);
 }
-if (!loadLocal()) loadProgram(EXAMPLES['Drive until close to a wall']);
+if (!loadLocal()) loadProgram(EXAMPLES[Object.keys(EXAMPLES)[0]]);
 setRunUi();
 })();
 </script>

@@ -12,7 +12,8 @@
 <main>
   <a class="back" href="./">← Choose a different kit</a>
   <h1>WeDo 2.0 Remote</h1>
-  <p class="sub">Connect to a LEGO Education WeDo 2.0 Smart Hub over Bluetooth.</p>
+  <p class="sub">Connect to a LEGO Education WeDo 2.0 Smart Hub over Bluetooth.
+    Want to write programs? Try the <a href="code.html?kit=wedo">block editor</a>.</p>
 
   <div id="noBle" class="warn">
     <strong>Bluetooth isn't available in this browser.</strong><br>
@@ -54,8 +55,29 @@
   </section>
 
   <section class="card">
-    <h2>Hub light</h2>
+    <h2>Hub</h2>
+    <label style="margin-top:0">Light</label>
     <div class="colors" id="colors"></div>
+    <label>Beeper</label>
+    <div class="row">
+      <button class="tone" data-freq="440" disabled>Low beep</button>
+      <button class="tone" data-freq="880" disabled>Beep</button>
+      <button class="tone" data-freq="1400" disabled>High beep</button>
+    </div>
+    <div class="status">Green button: <strong id="hubButton">–</strong></div>
+  </section>
+
+  <section class="card">
+    <h2>Sensors</h2>
+    <p class="note" id="noSensors" style="margin:0">Plug a motion or tilt sensor into port 1 or 2 and its reading appears here.</p>
+    <div class="sensor" id="motionRow" hidden>
+      <label>Motion sensor</label>
+      <div class="reading"><span class="value" id="motionValue">–</span><span class="bar"><span id="motionBar"></span></span></div>
+    </div>
+    <div class="sensor" id="tiltRow" hidden>
+      <label>Tilt sensor</label>
+      <div class="reading"><span class="value" id="tiltValue">–</span></div>
+    </div>
   </section>
 
   <button id="stopAll" class="wide stopall" disabled>Stop all motors</button>
@@ -76,39 +98,18 @@ window.addEventListener('error', function (e) {
   if (lg) lg.textContent = msg + '\n' + lg.textContent;
 });
 </script>
+<script src="wedo-lib.js"></script>
 <script>
 // Everything lives inside this function so its names can't clash with globals that
 // Web Bluetooth browsers such as Bluefy inject into the page.
 (function () {
 'use strict';
-// WeDo 2.0 Smart Hub GATT layout (same values used by LEGO's SDK and Scratch's WeDo 2.0 extension).
-const UUID = {
-  DEVICE_SERVICE: '00001523-1212-efde-1523-785feabcd123',
-  IO_SERVICE:     '00004f0e-1212-efde-1523-785feabcd123',
-  ATTACHED_IO:    '00001527-1212-efde-1523-785feabcd123',
-  INPUT_COMMAND:  '00001563-1212-efde-1523-785feabcd123',
-  OUTPUT_COMMAND: '00001565-1212-efde-1523-785feabcd123',
-};
-const IO_TYPE_MOTOR = 0x01;
-const LED_CONNECT_ID = 0x06;
-
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+const TYPE = WeDoHub.TYPE;
 
-let device = null;
-let outputChar = null;
-let inputChar = null;
+const hub = new WeDoHub({ log, onDisconnect: onDisconnected, onChange: render });
 const motorState = { 1: 0, 2: 0 }; // last direction per port: -1, 0, 1
-
-// Web Bluetooth only allows one GATT operation at a time, so queue all writes.
-let writeQueue = Promise.resolve();
-function write(char, bytes) {
-  writeQueue = writeQueue.then(() => {
-    const data = new Uint8Array(bytes);
-    return char.writeValueWithResponse ? char.writeValueWithResponse(data) : char.writeValue(data);
-  }).catch(err => log('Write failed: ' + err.message));
-  return writeQueue;
-}
 
 function log(msg) {
   const el = $('#log');
@@ -121,23 +122,14 @@ function setStatus(text, connected) {
 }
 
 function setControlsEnabled(on) {
-  $$('[data-port] button, [data-port] input, #colors button, #stopAll').forEach(el => el.disabled = !on);
-}
-
-// Low power values barely turn a WeDo motor, so map 10–100% onto 30–100 like Scratch does.
-function toPower(percent, dir) {
-  if (dir === 0) return 0;
-  const p = Math.round(30 + 0.7 * percent);
-  return dir > 0 ? p : -p;
+  $$('[data-port] button, [data-port] input, #colors button, [data-freq], #stopAll').forEach(el => el.disabled = !on);
 }
 
 function setMotor(port, dir) {
-  if (!outputChar) return;
+  if (!hub.connected) return;
   const percent = Number($(`[data-port="${port}"] .speed`).value);
-  const power = toPower(percent, dir);
   motorState[port] = dir;
-  // [connectId, commandId=motor power, payload length, signed power]
-  write(outputChar, [port, 0x01, 0x01, power & 0xff]);
+  hub.setMotor(port, dir * percent);
   updateMotorButtons(port);
 }
 
@@ -149,39 +141,35 @@ function updateMotorButtons(port) {
 }
 
 function stopAll() {
-  if (!outputChar) return;
+  if (!hub.connected) return;
   [1, 2].forEach(port => setMotor(port, 0));
 }
 
-async function setLed(r, g, b) {
-  if (!outputChar) return;
-  write(outputChar, [LED_CONNECT_ID, 0x04, 0x03, r, g, b]);
-}
-
-function onAttachedIo(event) {
-  const d = new Uint8Array(event.target.value.buffer);
-  const port = d[0];
-  const attached = d[1] === 1;
-  const type = d[3];
-  const badge = $(`[data-port="${port}"] .badge`);
-  if (attached) log(`Port ${port}: device type ${type} attached`);
-  else log(`Port ${port}: device detached`);
-  if (!badge) return;
-  const isMotor = attached && type === IO_TYPE_MOTOR;
-  badge.textContent = isMotor ? 'motor connected' : attached ? `sensor (type ${type})` : 'not detected';
-  badge.classList.toggle('on', isMotor);
-}
-
-// Explain why Bluetooth can't be used here, or return null if it can.
-function bluetoothProblem() {
-  if (!window.isSecureContext) return 'Bluetooth needs a secure page. Open the app from its https:// address (for example GitHub Pages), not from a file or http:// link.';
-  if (!navigator.bluetooth) return "This browser doesn't support Bluetooth. On iPhone/iPad, open this page in the free Bluefy browser. On other devices, use Chrome or Edge.";
-  if (window.top !== window.self) return 'This page is shown inside a preview frame, which blocks Bluetooth. Open it directly in the browser.';
-  return null;
+// Show what the hub reports: what's plugged in, sensor values, the button and battery.
+function render() {
+  [1, 2].forEach(port => {
+    const type = hub.ports[port];
+    const badge = $(`[data-port="${port}"] .badge`);
+    badge.textContent = type === TYPE.MOTOR ? 'motor connected' : type ? (WeDoHub.TYPE_NAMES[type] || 'type ' + type) + ' plugged in' : 'not detected';
+    badge.classList.toggle('on', type === TYPE.MOTOR);
+  });
+  $('#hubButton').textContent = hub.connected ? (hub.buttonPressed ? 'pressed' : 'not pressed') : '–';
+  const hasMotion = hub.hasSensor(TYPE.MOTION), hasTilt = hub.hasSensor(TYPE.TILT);
+  $('#motionRow').hidden = !hasMotion;
+  $('#tiltRow').hidden = !hasTilt;
+  $('#noSensors').hidden = hasMotion || hasTilt;
+  const d = hub.distance;
+  $('#motionValue').textContent = d === null ? '–' : d + ' (0 = close)';
+  $('#motionBar').style.width = (d === null ? 0 : 100 - d) + '%';
+  if (hasTilt) {
+    const dirs = ['up', 'down', 'left', 'right'].filter(dir => hub.isTilted(dir));
+    $('#tiltValue').textContent = hub.tiltRaw ? (dirs.length ? 'tilted ' + dirs.join(' and ') : 'level') : '–';
+  }
+  if (hub.battery !== null) { $('#battery').textContent = hub.battery + '%'; $('#batteryRow').hidden = false; }
 }
 
 async function connect(showAll = false) {
-  const problem = bluetoothProblem();
+  const problem = WeDoHub.bluetoothProblem();
   if (problem) {
     setStatus(problem, false);
     $('#noBle').classList.add('show');
@@ -191,58 +179,22 @@ async function connect(showAll = false) {
   try {
     setStatus('Choose your Smart Hub from the list…', false);
     log('Opening Bluetooth device chooser' + (showAll ? ' (all devices)' : ''));
-    const options = { optionalServices: [UUID.DEVICE_SERVICE, UUID.IO_SERVICE, 'battery_service'] };
-    if (showAll) options.acceptAllDevices = true;
-    else options.filters = [{ services: [UUID.DEVICE_SERVICE] }];
-    device = await navigator.bluetooth.requestDevice(options);
-    device.addEventListener('gattserverdisconnected', onDisconnected);
-    setStatus('Connecting to ' + (device.name || 'Smart Hub') + '…', false);
-    const server = await device.gatt.connect();
-
-    const io = await server.getPrimaryService(UUID.IO_SERVICE);
-    outputChar = await io.getCharacteristic(UUID.OUTPUT_COMMAND);
-    inputChar = await io.getCharacteristic(UUID.INPUT_COMMAND);
-
-    const dev = await server.getPrimaryService(UUID.DEVICE_SERVICE);
-    const attachedIo = await dev.getCharacteristic(UUID.ATTACHED_IO);
-    attachedIo.addEventListener('characteristicvaluechanged', onAttachedIo);
-    await attachedIo.startNotifications();
-
-    // Put the hub light into RGB mode so we can choose any colour.
-    await write(inputChar, [0x01, 0x02, LED_CONNECT_ID, 0x17, 0x01, 0x01, 0x00, 0x00, 0x00, 0x02, 0x01]);
-
-    readBattery(server);
-
-    setStatus('Connected to ' + (device.name || 'Smart Hub'), true);
+    const name = await hub.connect(showAll);
+    setStatus('Connected to ' + name, true);
     $('#connectBtn').textContent = 'Disconnect';
     setControlsEnabled(true);
+    render();
     log('Connected');
   } catch (err) {
     log('Connect failed: ' + err.name + ': ' + err.message);
     setStatus(err.name === 'NotFoundError' ? 'No hub chosen.' : 'Could not connect: ' + err.message, false);
-    if (device && device.gatt.connected) device.gatt.disconnect();
-  }
-}
-
-async function readBattery(server) {
-  try {
-    const svc = await server.getPrimaryService('battery_service');
-    const ch = await svc.getCharacteristic('battery_level');
-    const show = v => { $('#battery').textContent = v.getUint8(0) + '%'; $('#batteryRow').hidden = false; };
-    show(await ch.readValue());
-    ch.addEventListener('characteristicvaluechanged', e => show(e.target.value));
-    await ch.startNotifications().catch(() => {});
-  } catch (err) {
-    log('Battery level unavailable');
   }
 }
 
 function onDisconnected() {
-  outputChar = inputChar = null;
-  writeQueue = Promise.resolve();
   setControlsEnabled(false);
   [1, 2].forEach(p => { motorState[p] = 0; updateMotorButtons(p); });
-  $$('.badge').forEach(b => { b.textContent = 'not detected'; b.classList.remove('on'); });
+  render();
   $('#batteryRow').hidden = true;
   $('#connectBtn').textContent = 'Connect to Smart Hub';
   setStatus('Disconnected. Press the hub button and tap Connect again.', false);
@@ -250,20 +202,14 @@ function onDisconnected() {
 }
 
 // --- wire up the UI ---
-const COLORS = [
-  ['Red', 255, 0, 0], ['Orange', 255, 80, 0], ['Yellow', 255, 200, 0],
-  ['Green', 0, 255, 0], ['Blue', 0, 0, 255], ['Purple', 160, 0, 255],
-  ['Pink', 255, 0, 120], ['Cyan', 0, 220, 255], ['White', 255, 255, 255],
-  ['Off', 0, 0, 0],
-];
-COLORS.forEach(([name, r, g, b]) => {
+WeDoHub.COLORS.forEach(([name, r, g, b]) => {
   const btn = document.createElement('button');
   btn.className = 'swatch';
   btn.title = name;
   btn.setAttribute('aria-label', name);
   btn.disabled = true;
   btn.style.background = name === 'Off' ? 'repeating-linear-gradient(45deg,#333 0 6px,#555 6px 12px)' : `rgb(${r},${g},${b})`;
-  btn.addEventListener('click', () => setLed(r, g, b));
+  btn.addEventListener('click', () => hub.setLed(r, g, b));
   $('#colors').appendChild(btn);
 });
 
@@ -276,16 +222,13 @@ $$('[data-port]').forEach(card => {
     if (motorState[port] !== 0) setMotor(port, motorState[port]); // update running motor live
   });
 });
+$$('[data-freq]').forEach(b => b.addEventListener('click', () => hub.playTone(Number(b.dataset.freq), 300)));
 
 $('#stopAll').addEventListener('click', stopAll);
 
 $('#connectBtn').addEventListener('click', () => {
-  if (device && device.gatt.connected) {
-    stopAll();
-    writeQueue.then(() => device.gatt.disconnect());
-  } else {
-    connect();
-  }
+  if (hub.connected) hub.disconnect();
+  else connect();
 });
 
 $('#showAll').addEventListener('click', e => { e.preventDefault(); connect(true); });
@@ -294,7 +237,7 @@ $('#showAll').addEventListener('click', e => { e.preventDefault(); connect(true)
 document.addEventListener('visibilitychange', () => { if (document.hidden) stopAll(); });
 
 // Leave the button enabled even when Bluetooth is missing, so tapping it explains why.
-const startupProblem = bluetoothProblem();
+const startupProblem = WeDoHub.bluetoothProblem();
 if (startupProblem) {
   $('#noBle').classList.add('show');
   setStatus(startupProblem, false);
@@ -302,6 +245,7 @@ if (startupProblem) {
 } else {
   setStatus('Not connected. Press the green button on the hub, then tap Connect.', false);
 }
+render();
 })();
 </script>
 </body>
