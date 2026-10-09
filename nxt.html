@@ -35,6 +35,11 @@
       <p class="note"><strong>Bluetooth:</strong> on the brick, go to Bluetooth → On/Off → On, and Visibility → Visible.
         Pair the brick in the computer's Bluetooth settings first (the passkey is usually 1234; confirm it on the brick with the orange button).
         Then click Connect by Bluetooth and choose the brick or its COM port.</p>
+      <p class="note"><strong>Which COM port? (Windows)</strong> Windows creates two ports for the brick. Open Settings → Bluetooth &amp; devices →
+        More Bluetooth settings → COM Ports, and use the one marked <em>Outgoing</em> with the brick's name.</p>
+      <p class="note"><strong>Worked once, now fails?</strong> The NXT's Bluetooth can get stuck after a connection ends. Turn the brick off and on,
+        and make sure no other tab or program (such as the LEGO software) is connected to it. If it still fails, remove the brick in the computer's Bluetooth
+        settings and pair it again.</p>
     </details>
   </section>
 
@@ -198,15 +203,20 @@ async function openSerial() {
   const writer = port.writable.getWriter();
   const reader = port.readable.getReader();
   let buf = new Uint8Array(0);
-  let waiting = null; // resolver waiting for a full reply packet
+  let waiting = null; // { cmd, resolve, reject } for the reply we're waiting for
 
+  // Pull complete packets out of the buffer. Only a reply to the command we're waiting
+  // for is delivered; anything else (such as a reply that arrived too late) is dropped.
   function tryDeliver() {
-    if (!waiting || buf.length < 2) return;
-    const len = buf[0] | (buf[1] << 8);
-    if (buf.length < 2 + len) return;
-    const pkt = buf.slice(2, 2 + len);
-    buf = buf.slice(2 + len);
-    const w = waiting; waiting = null; w.resolve(pkt);
+    while (buf.length >= 2) {
+      const len = buf[0] | (buf[1] << 8);
+      if (buf.length < 2 + len) return;
+      const pkt = buf.slice(2, 2 + len);
+      buf = buf.slice(2 + len);
+      if (waiting && pkt[0] === 0x02 && pkt[1] === waiting.cmd && (waiting.port === null || pkt[3] === waiting.port)) {
+        const w = waiting; waiting = null; w.resolve(pkt);
+      }
+    }
   }
   (async () => {
     try {
@@ -235,20 +245,25 @@ async function openSerial() {
     name: 'Bluetooth',
     port,
     send: bytes => writer.write(frame(bytes)),
-    async request(bytes) {
+    async request(bytes, timeoutMs = 3000) {
+      buf = new Uint8Array(0); // discard anything stale before asking
       const reply = new Promise((resolve, reject) => {
-        waiting = { resolve, reject };
-        setTimeout(() => { if (waiting && waiting.resolve === resolve) { waiting = null; reject(new Error('No reply from brick')); } }, 3000);
+        // Sensor and motor readings echo the port number, so check that too.
+        const echoesPort = bytes[1] === CMD.GET_INPUT_VALUES || bytes[1] === CMD.GET_OUTPUT_STATE;
+        waiting = { cmd: bytes[1], port: echoesPort ? bytes[2] : null, resolve, reject };
+        setTimeout(() => { if (waiting && waiting.resolve === resolve) { waiting = null; reject(new Error('No reply from brick')); } }, timeoutMs);
       });
       await writer.write(frame(bytes));
-      const pkt = await reply;
-      tryDeliver();
-      return pkt;
+      return reply;
     },
     async close() {
-      try { await reader.cancel(); } catch (e) {}
-      reader.releaseLock(); writer.releaseLock();
-      await port.close();
+      // Never let a stuck Bluetooth link stop the port from being released.
+      const step = p => Promise.race([Promise.resolve(p).catch(() => {}), sleep(1000)]);
+      await step(reader.cancel());
+      try { reader.releaseLock(); } catch (e) {}
+      await step(writer.close());
+      try { writer.releaseLock(); } catch (e) {}
+      await step(port.close());
     },
   };
 }
@@ -430,7 +445,20 @@ async function connect(kind) {
     setStatus(kind === 'usb' ? 'Choose the NXT from the list…' : 'Choose the NXT (or its COM port) from the list…', false);
     link = kind === 'usb' ? await openUsb() : await openSerial();
     setStatus('Talking to the brick…', false);
-    const name = await readName();
+    let name = null;
+    if (kind === 'bt') {
+      // The Bluetooth link can take a moment to settle, and the first message is sometimes lost.
+      await sleep(500);
+      for (let attempt = 1; name === null; attempt++) {
+        try { name = await readName(); }
+        catch (err) {
+          if (attempt >= 3) throw err;
+          log('No answer yet, trying again…');
+        }
+      }
+    } else {
+      name = await readName();
+    }
     $('#brickName').textContent = name;
     await updateBattery().catch(err => log('Battery: ' + err.message));
     setConnectedUi(true);
@@ -452,7 +480,13 @@ async function connect(kind) {
     if (err.name === 'NotFoundError') msg = 'No brick chosen.';
     else if (kind === 'usb' && (err.name === 'SecurityError' || /access denied|claim/i.test(err.message)))
       msg = "The brick was found but the computer wouldn't let the browser use it. On Windows, see Connection help below (Zadig).";
-    else if (kind === 'bt') msg += '. Check the brick is paired and its Bluetooth is on (see Connection help).';
+    else if (kind === 'bt' && err.name === 'NetworkError')
+      msg = "The computer couldn't open a Bluetooth connection to the brick. Check the brick is on and awake, " +
+        "close any other tab or program using it, then turn the brick's Bluetooth off and on again (or restart the brick) and retry. " +
+        "On Windows, choose the port marked \"Outgoing\" (see Connection help).";
+    else if (kind === 'bt' && /no reply/i.test(err.message))
+      msg = "The connection opened but the brick didn't answer. You may have chosen the wrong port: on Windows, pick the \"Outgoing\" one " +
+        "(see Connection help). Otherwise restart the brick, or remove and re-pair it in the computer's Bluetooth settings, and retry.";
     setStatus(msg, false);
     await closeLink();
   }
@@ -510,6 +544,9 @@ $('#disconnectBtn').addEventListener('click', disconnect);
 if (navigator.usb) {
   navigator.usb.addEventListener('disconnect', e => { if (link && link.device === e.device) onDisconnected(); });
 }
+
+// Release the connection cleanly when the page is closed or reloaded.
+window.addEventListener('pagehide', () => { if (link) { stopAll(); closeLink(); } });
 
 // Safety: stop motors if the page is hidden (tab switched, laptop closed).
 document.addEventListener('visibilitychange', () => { if (document.hidden) stopAll(); });

@@ -75,3 +75,10 @@ Phones and tablets can't be used: the NXT uses an older type of Bluetooth that i
 3. Click **Connect by Bluetooth** and choose the brick (or its COM port on Windows).
 
 The brick goes to sleep after a while with no activity. While connected, the app keeps it awake.
+
+## NXT Bluetooth troubleshooting
+
+- **"Failed to open serial port":** the computer couldn't reach the brick. Check the brick is on and awake, and that no other tab or program (such as the LEGO software) is connected to it. Then turn the brick's Bluetooth off and on (or restart the brick) and try again.
+- **"No reply from brick":** the port opened but the brick didn't answer. On Windows you may have picked the wrong port: Windows creates two for the brick. Open Settings → Bluetooth & devices → More Bluetooth settings → COM Ports and use the one marked **Outgoing**.
+- **Worked once, now keeps failing:** the NXT's Bluetooth can get stuck after a connection ends. Restart the brick. If that doesn't help, remove the brick in the computer's Bluetooth settings and pair it again.
+- USB is more reliable than Bluetooth if you have the cable.
