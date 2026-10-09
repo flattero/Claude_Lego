@@ -144,6 +144,20 @@
 </main>
 
 <script>
+// Show any script error on screen, so problems on a phone are visible without dev tools.
+window.addEventListener('error', function (e) {
+  var msg = 'Error: ' + (e.message || e) + (e.lineno ? ' (line ' + e.lineno + ')' : '');
+  var st = document.getElementById('statusText');
+  if (st) st.textContent = msg;
+  var lg = document.getElementById('log');
+  if (lg) lg.textContent = msg + '\n' + lg.textContent;
+});
+</script>
+<script>
+// Everything lives inside this function so its names can't clash with globals that
+// Web Bluetooth browsers such as Bluefy inject into the page.
+(function () {
+'use strict';
 // WeDo 2.0 Smart Hub GATT layout (same values used by LEGO's SDK and Scratch's WeDo 2.0 extension).
 const UUID = {
   DEVICE_SERVICE: '00001523-1212-efde-1523-785feabcd123',
@@ -156,7 +170,7 @@ const IO_TYPE_MOTOR = 0x01;
 const LED_CONNECT_ID = 0x06;
 
 const $ = (sel, root = document) => root.querySelector(sel);
-const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
 let device = null;
 let outputChar = null;
@@ -254,10 +268,10 @@ async function connect(showAll = false) {
   try {
     setStatus('Choose your Smart Hub from the list…', false);
     log('Opening Bluetooth device chooser' + (showAll ? ' (all devices)' : ''));
-    device = await navigator.bluetooth.requestDevice({
-      ...(showAll ? { acceptAllDevices: true } : { filters: [{ services: [UUID.DEVICE_SERVICE] }] }),
-      optionalServices: [UUID.DEVICE_SERVICE, UUID.IO_SERVICE, 'battery_service'],
-    });
+    const options = { optionalServices: [UUID.DEVICE_SERVICE, UUID.IO_SERVICE, 'battery_service'] };
+    if (showAll) options.acceptAllDevices = true;
+    else options.filters = [{ services: [UUID.DEVICE_SERVICE] }];
+    device = await navigator.bluetooth.requestDevice(options);
     device.addEventListener('gattserverdisconnected', onDisconnected);
     setStatus('Connecting to ' + (device.name || 'Smart Hub') + '…', false);
     const server = await device.gatt.connect();
@@ -365,6 +379,7 @@ if (startupProblem) {
 } else {
   setStatus('Not connected. Press the green button on the hub, then tap Connect.', false);
 }
+})();
 </script>
 </body>
 </html>
