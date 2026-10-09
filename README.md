@@ -1,6 +1,17 @@
-# WeDo 2.0 Remote
+# Robot Remote
 
-A simple one-page web app for controlling a **LEGO Education WeDo 2.0 Smart Hub** and its motors over Bluetooth. It replaces the WeDo 2.0 iOS app, which is no longer supported.
+Simple web-based controls for two older LEGO® Education kits whose official apps no longer work well:
+
+| Kit | Page | Works on |
+| --- | --- | --- |
+| **WeDo 2.0** Smart Hub | `wedo.html` | Laptop/desktop (Chrome or Edge), Android (Chrome), iPhone/iPad (Bluefy browser only) |
+| **MINDSTORMS® NXT** brick (e.g. set 9797) | `nxt.html` | Laptop/desktop only (Chrome or Edge), by USB cable or Bluetooth |
+
+The home page (`index.html`) asks which kit you have and opens the right controls.
+
+Not made, endorsed or supported by the LEGO Group. LEGO, MINDSTORMS and WeDo are trademarks of the LEGO Group.
+
+# WeDo 2.0
 
 Features:
 - Connect to the Smart Hub over Bluetooth
@@ -10,7 +21,7 @@ Features:
 - Show the battery level
 - A **Stop all motors** button. Motors also stop automatically if you leave the page or lock the phone.
 
-## Using it on an iPhone or iPad
+## Using WeDo 2.0 on an iPhone or iPad
 
 Apple doesn't let Safari or Chrome on iOS use Bluetooth from a web page, so you need a browser that supports Web Bluetooth:
 
@@ -30,12 +41,32 @@ Web Bluetooth only works on pages served over **HTTPS**. The easiest option is G
 2. Under **Build and deployment**, set Source to *Deploy from a branch*, choose the branch, and select the `/ (root)` folder.
 3. After a minute, the app is live at `https://<your-username>.github.io/<repo-name>/`.
 
-The whole app is the single file `index.html`. It has no dependencies, so you can host it anywhere that serves HTTPS.
+The app is plain HTML files (`index.html`, `wedo.html`, `nxt.html`, `style.css`) with no dependencies, so you can host it anywhere that serves HTTPS.
 
-## Troubleshooting
+## WeDo 2.0 troubleshooting
 
 - **Connect button does nothing:** read the message under the button. The page needs Bluefy on iPhone, an `https://` address, and to be opened directly. A file preview, GitHub's code view, or an app's built-in viewer won't work.
 - **Status stuck on "Loading…":** the viewer is blocking the page's scripts. Open the GitHub Pages address in Bluefy.
 - **Hub not in the list:** tap *Show all Bluetooth devices* under the button and look for "LPF2 Smart Hub" or similar. Also press the hub's green button again (it switches off after a while), and make sure no other device or app is connected to it.
 - **Motor shows "not detected":** unplug the motor cable and plug it back in. The buttons send commands to that port anyway.
 - **Motor won't turn at low speed:** WeDo motors need some power to start moving. The app sets the lowest slider setting to about 30% power.
+
+# MINDSTORMS NXT
+
+Features: motors A, B and C forward, back and off with a speed slider, three beeps, brick name and battery voltage, and **Stop all motors**.
+
+Phones and tablets can't be used: the NXT uses an older type of Bluetooth that iOS and Android browsers can't reach. Use Chrome or Edge on a laptop or desktop.
+
+1. Turn the brick on with the orange button.
+2. Open the app, choose **MINDSTORMS NXT**, then connect by USB or Bluetooth.
+
+**USB (recommended):** plug in the brick's USB cable and click **Connect by USB**.
+- **Windows:** if connecting fails, Windows is using LEGO's own NXT driver, which browsers can't use. Run the free tool [Zadig](https://zadig.akeo.ie/), choose the "NXT" device and install the **WinUSB** driver. The old LEGO NXT-G software can't see the brick again until you switch the driver back.
+- **Mac and Chromebook:** should work without extra steps.
+
+**Bluetooth:**
+1. On the brick, go to Bluetooth → On/Off → On, and Bluetooth → Visibility → Visible.
+2. Pair the brick in the computer's Bluetooth settings. The passkey is usually 1234; confirm it on the brick with the orange button.
+3. Click **Connect by Bluetooth** and choose the brick (or its COM port on Windows).
+
+The brick goes to sleep after a while with no activity. While connected, the app keeps it awake.

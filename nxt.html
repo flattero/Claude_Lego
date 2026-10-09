@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#d01012">
+<title>NXT Remote</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <a class="back" href="./">← Choose a different kit</a>
+  <h1>NXT Remote</h1>
+  <p class="sub">Control a MINDSTORMS NXT brick from Chrome or Edge on a laptop or desktop.</p>
+
+  <div id="noSupport" class="warn"></div>
+
+  <section class="card">
+    <p style="margin-top:0">Turn the brick on with the <strong>orange button</strong>, then choose how it's connected:</p>
+    <div class="row2">
+      <button id="usbBtn" class="connect">Connect by USB</button>
+      <button id="btBtn" class="connect">Connect by Bluetooth</button>
+    </div>
+    <button id="disconnectBtn" class="wide stopall" style="margin-top:8px" hidden>Disconnect</button>
+    <div class="status">
+      <span id="dot" class="dot"></span>
+      <span id="statusText">Loading… If this message doesn't change, this viewer is blocking the app's scripts. Open the page in Chrome or Edge.</span>
+    </div>
+    <div class="status" id="infoRow" hidden>🤖 <span id="brickName">–</span> &nbsp; 🔋 <span id="battery">–</span></div>
+    <details style="margin-top:12px">
+      <summary class="note">Connection help</summary>
+      <p class="note"><strong>USB:</strong> plug the brick into the computer with its USB cable. On Windows, if the brick is in the list
+        but connecting fails, Windows is using LEGO's own driver. Use the free tool <em>Zadig</em> to switch the
+        "NXT" device to the <em>WinUSB</em> driver. Note: the old LEGO NXT software can't see the brick after that until you switch it back.</p>
+      <p class="note"><strong>Bluetooth:</strong> on the brick, go to Bluetooth → On/Off → On, and Visibility → Visible.
+        Pair the brick in the computer's Bluetooth settings first (the passkey is usually 1234; confirm it on the brick with the orange button).
+        Then click Connect by Bluetooth and choose the brick or its COM port.</p>
+    </details>
+  </section>
+
+  <section class="card" data-port="0">
+    <h2>Motor A</h2>
+    <div class="row">
+      <button class="rev" data-dir="-1" disabled>◀ Back</button>
+      <button class="stop" data-dir="0" disabled>■ Off</button>
+      <button class="fwd" data-dir="1" disabled>On ▶</button>
+    </div>
+    <label>Speed: <span class="speedVal">75</span>%</label>
+    <input type="range" class="speed" min="10" max="100" step="5" value="75" disabled>
+  </section>
+
+  <section class="card" data-port="1">
+    <h2>Motor B</h2>
+    <div class="row">
+      <button class="rev" data-dir="-1" disabled>◀ Back</button>
+      <button class="stop" data-dir="0" disabled>■ Off</button>
+      <button class="fwd" data-dir="1" disabled>On ▶</button>
+    </div>
+    <label>Speed: <span class="speedVal">75</span>%</label>
+    <input type="range" class="speed" min="10" max="100" step="5" value="75" disabled>
+  </section>
+
+  <section class="card" data-port="2">
+    <h2>Motor C</h2>
+    <div class="row">
+      <button class="rev" data-dir="-1" disabled>◀ Back</button>
+      <button class="stop" data-dir="0" disabled>■ Off</button>
+      <button class="fwd" data-dir="1" disabled>On ▶</button>
+    </div>
+    <label>Speed: <span class="speedVal">75</span>%</label>
+    <input type="range" class="speed" min="10" max="100" step="5" value="75" disabled>
+  </section>
+
+  <section class="card">
+    <h2>Sound</h2>
+    <div class="row">
+      <button class="tone" data-freq="440" disabled>Low beep</button>
+      <button class="tone" data-freq="880" disabled>Beep</button>
+      <button class="tone" data-freq="1760" disabled>High beep</button>
+    </div>
+  </section>
+
+  <button id="stopAll" class="wide stopall" disabled>Stop all motors</button>
+
+  <section class="card" style="margin-top:16px">
+    <h2>Log</h2>
+    <pre id="log"></pre>
+  </section>
+</main>
+
+<script>
+// Show any script error on screen, so problems are visible without dev tools.
+window.addEventListener('error', function (e) {
+  var msg = 'Error: ' + (e.message || e) + (e.lineno ? ' (line ' + e.lineno + ')' : '');
+  var st = document.getElementById('statusText');
+  if (st) st.textContent = msg;
+  var lg = document.getElementById('log');
+  if (lg) lg.textContent = msg + '\n' + lg.textContent;
+});
+</script>
+<script>
+(function () {
+'use strict';
+// NXT "direct commands", from LEGO's MINDSTORMS NXT Bluetooth Developer Kit.
+// Over USB a command is sent as-is; over Bluetooth it is prefixed with a 2-byte little-endian length.
+const NXT_USB = { vendorId: 0x0694, productId: 0x0002 };
+const SPP_UUID = '00001101-0000-1000-8000-00805f9b34fb'; // Bluetooth Serial Port Profile
+
+const DIRECT_REPLY = 0x00, DIRECT_NO_REPLY = 0x80, SYSTEM_REPLY = 0x01;
+const CMD = { PLAY_TONE: 0x03, SET_OUTPUT_STATE: 0x04, GET_BATTERY: 0x0B, KEEP_ALIVE: 0x0D, GET_DEVICE_INFO: 0x9B };
+const MODE_MOTORON = 0x01, MODE_BRAKE = 0x02, MODE_REGULATED = 0x04;
+const REG_SPEED = 0x01, RUN_STATE_RUNNING = 0x20;
+
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+let link = null;          // { send(bytes), request(bytes) -> Promise<Uint8Array>, close() }
+let timer = null;
+const motorState = [0, 0, 0];
+
+function log(msg) {
+  const el = $('#log');
+  el.textContent = (new Date().toLocaleTimeString() + '  ' + msg + '\n' + el.textContent).slice(0, 4000);
+}
+function setStatus(text, connected) {
+  $('#statusText').textContent = text;
+  $('#dot').classList.toggle('on', connected);
+}
+function setConnectedUi(on) {
+  $$('[data-port] button, [data-port] input, [data-freq], #stopAll').forEach(el => el.disabled = !on);
+  $('#usbBtn').hidden = $('#btBtn').hidden = on;
+  $('#disconnectBtn').hidden = !on;
+  $('#infoRow').hidden = !on;
+}
+
+// Only one command may be in flight at a time, so queue everything.
+let queue = Promise.resolve();
+function enqueue(fn) {
+  const p = queue.then(fn);
+  queue = p.catch(err => log('Command failed: ' + err.message));
+  return p;
+}
+const send = bytes => enqueue(() => link && link.send(new Uint8Array(bytes)));
+const request = bytes => enqueue(() => link ? link.request(new Uint8Array(bytes)) : Promise.reject(new Error('Not connected')));
+
+// --- USB transport (WebUSB) ---
+async function openUsb() {
+  const dev = await navigator.usb.requestDevice({ filters: [NXT_USB] });
+  await dev.open();
+  if (dev.configuration === null) await dev.selectConfiguration(1);
+  await dev.claimInterface(0);
+  const eps = dev.configuration.interfaces[0].alternate.endpoints;
+  const outEp = (eps.find(e => e.direction === 'out') || { endpointNumber: 1 }).endpointNumber;
+  const inEp = (eps.find(e => e.direction === 'in') || { endpointNumber: 2 }).endpointNumber;
+  return {
+    name: 'USB',
+    device: dev,
+    send: bytes => dev.transferOut(outEp, bytes),
+    async request(bytes) {
+      await dev.transferOut(outEp, bytes);
+      const res = await dev.transferIn(inEp, 64);
+      return new Uint8Array(res.data.buffer);
+    },
+    close: () => dev.close(),
+  };
+}
+
+// --- Bluetooth transport (Web Serial over the brick's serial port profile) ---
+async function openSerial() {
+  const port = await navigator.serial.requestPort({ allowedBluetoothServiceClassIds: [SPP_UUID] });
+  await port.open({ baudRate: 115200 });
+  const writer = port.writable.getWriter();
+  const reader = port.readable.getReader();
+  let buf = new Uint8Array(0);
+  let waiting = null; // resolver waiting for a full reply packet
+
+  function tryDeliver() {
+    if (!waiting || buf.length < 2) return;
+    const len = buf[0] | (buf[1] << 8);
+    if (buf.length < 2 + len) return;
+    const pkt = buf.slice(2, 2 + len);
+    buf = buf.slice(2 + len);
+    const w = waiting; waiting = null; w.resolve(pkt);
+  }
+  (async () => {
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const next = new Uint8Array(buf.length + value.length);
+        next.set(buf); next.set(value, buf.length);
+        buf = next;
+        tryDeliver();
+      }
+    } catch (err) {
+      log('Bluetooth read stopped: ' + err.message);
+    }
+    if (waiting) waiting.reject(new Error('Connection closed'));
+    if (link && link.port === port) onDisconnected();
+  })();
+
+  const frame = bytes => {
+    const out = new Uint8Array(bytes.length + 2);
+    out[0] = bytes.length & 0xff; out[1] = bytes.length >> 8;
+    out.set(bytes, 2);
+    return out;
+  };
+  return {
+    name: 'Bluetooth',
+    port,
+    send: bytes => writer.write(frame(bytes)),
+    async request(bytes) {
+      const reply = new Promise((resolve, reject) => {
+        waiting = { resolve, reject };
+        setTimeout(() => { if (waiting && waiting.resolve === resolve) { waiting = null; reject(new Error('No reply from brick')); } }, 3000);
+      });
+      await writer.write(frame(bytes));
+      const pkt = await reply;
+      tryDeliver();
+      return pkt;
+    },
+    async close() {
+      try { await reader.cancel(); } catch (e) {}
+      reader.releaseLock(); writer.releaseLock();
+      await port.close();
+    },
+  };
+}
+
+// --- Brick commands ---
+function setMotor(port, dir) {
+  const speed = Number($(`[data-port="${port}"] .speed`).value);
+  motorState[port] = dir;
+  updateMotorButtons(port);
+  if (dir === 0) {
+    // Power off and let the motor coast to a stop.
+    return send([DIRECT_NO_REPLY, CMD.SET_OUTPUT_STATE, port, 0, 0x00, 0x00, 0, 0x00, 0, 0, 0, 0]);
+  }
+  const power = (dir > 0 ? speed : -speed) & 0xff;
+  // Regulated speed control keeps the speed steady under load. Tacho limit 0 = run until told to stop.
+  return send([DIRECT_NO_REPLY, CMD.SET_OUTPUT_STATE, port, power,
+    MODE_MOTORON | MODE_BRAKE | MODE_REGULATED, REG_SPEED, 0, RUN_STATE_RUNNING, 0, 0, 0, 0]);
+}
+function updateMotorButtons(port) {
+  $$(`[data-port="${port}"] [data-dir]`).forEach(b => {
+    b.style.outline = Number(b.dataset.dir) === motorState[port] ? '3px solid var(--text)' : 'none';
+  });
+}
+function stopAll() {
+  if (!link) return;
+  [0, 1, 2].forEach(p => setMotor(p, 0));
+}
+function playTone(freq, ms = 200) {
+  return send([DIRECT_NO_REPLY, CMD.PLAY_TONE, freq & 0xff, freq >> 8, ms & 0xff, ms >> 8]);
+}
+async function updateBattery() {
+  const r = await request([DIRECT_REPLY, CMD.GET_BATTERY]);
+  if (r[0] === 0x02 && r[1] === CMD.GET_BATTERY && r[2] === 0) {
+    const mv = r[3] | (r[4] << 8);
+    // 6 AA cells: about 9.0 V full, the brick gets unreliable below about 6.5 V.
+    const pct = Math.max(0, Math.min(100, Math.round((mv - 6500) / 25)));
+    $('#battery').textContent = (mv / 1000).toFixed(2) + ' V (about ' + pct + '%)';
+  }
+}
+async function readName() {
+  const r = await request([SYSTEM_REPLY, CMD.GET_DEVICE_INFO]);
+  if (r[0] === 0x02 && r[1] === CMD.GET_DEVICE_INFO && r[2] === 0) {
+    const nameBytes = r.slice(3, 18);
+    const end = nameBytes.indexOf(0);
+    return new TextDecoder().decode(end >= 0 ? nameBytes.slice(0, end) : nameBytes);
+  }
+  return 'NXT';
+}
+
+async function connect(kind) {
+  try {
+    setStatus(kind === 'usb' ? 'Choose the NXT from the list…' : 'Choose the NXT (or its COM port) from the list…', false);
+    link = kind === 'usb' ? await openUsb() : await openSerial();
+    setStatus('Talking to the brick…', false);
+    const name = await readName();
+    $('#brickName').textContent = name;
+    await updateBattery().catch(err => log('Battery: ' + err.message));
+    setConnectedUi(true);
+    setStatus('Connected to ' + name + ' by ' + link.name, true);
+    log('Connected by ' + link.name);
+    playTone(1320, 120);
+    // Read the battery now and then; this also stops the brick going to sleep.
+    timer = setInterval(() => {
+      send([DIRECT_NO_REPLY, CMD.KEEP_ALIVE]);
+      updateBattery().catch(() => {});
+    }, 30000);
+  } catch (err) {
+    log('Connect failed: ' + err.name + ': ' + err.message);
+    let msg = 'Could not connect: ' + err.message;
+    if (err.name === 'NotFoundError') msg = 'No brick chosen.';
+    else if (kind === 'usb' && (err.name === 'SecurityError' || /access denied|claim/i.test(err.message)))
+      msg = "The brick was found but the computer wouldn't let the browser use it. On Windows, see Connection help below (Zadig).";
+    else if (kind === 'bt') msg += '. Check the brick is paired and its Bluetooth is on (see Connection help).';
+    setStatus(msg, false);
+    await closeLink();
+  }
+}
+
+async function closeLink() {
+  clearInterval(timer); timer = null;
+  const l = link; link = null;
+  queue = Promise.resolve();
+  if (l) { try { await l.close(); } catch (e) {} }
+}
+
+async function disconnect() {
+  stopAll();
+  await queue;
+  await closeLink();
+  onDisconnected();
+}
+
+function onDisconnected() {
+  if (link) closeLink();
+  setConnectedUi(false);
+  [0, 1, 2].forEach(p => { motorState[p] = 0; updateMotorButtons(p); });
+  setStatus('Disconnected.', false);
+  log('Disconnected');
+}
+
+// --- wire up the UI ---
+$$('[data-port]').forEach(card => {
+  const port = Number(card.dataset.port);
+  $$('[data-dir]', card).forEach(btn => btn.addEventListener('click', () => setMotor(port, Number(btn.dataset.dir))));
+  const slider = $('.speed', card);
+  slider.addEventListener('input', () => {
+    $('.speedVal', card).textContent = slider.value;
+    if (motorState[port] !== 0) setMotor(port, motorState[port]);
+  });
+});
+$$('[data-freq]').forEach(b => b.addEventListener('click', () => playTone(Number(b.dataset.freq))));
+$('#stopAll').addEventListener('click', stopAll);
+$('#usbBtn').addEventListener('click', () => connect('usb'));
+$('#btBtn').addEventListener('click', () => connect('bt'));
+$('#disconnectBtn').addEventListener('click', disconnect);
+
+if (navigator.usb) {
+  navigator.usb.addEventListener('disconnect', e => { if (link && link.device === e.device) onDisconnected(); });
+}
+
+// Safety: stop motors if the page is hidden (tab switched, laptop closed).
+document.addEventListener('visibilitychange', () => { if (document.hidden) stopAll(); });
+
+const problems = [];
+if (!window.isSecureContext) problems.push('This page must be opened from an https:// address.');
+if (!navigator.usb) $('#usbBtn').disabled = true;
+if (!navigator.serial) $('#btBtn').disabled = true;
+if (!navigator.usb && !navigator.serial) {
+  problems.push(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+    ? "Phones and tablets can't connect to an NXT brick. Open this page in Chrome or Edge on a laptop or desktop computer."
+    : "This browser can't connect to an NXT brick. Use Chrome or Edge on a laptop or desktop computer.");
+}
+if (problems.length) {
+  $('#noSupport').textContent = problems.join(' ');
+  $('#noSupport').classList.add('show');
+  setStatus(problems.join(' '), false);
+} else {
+  setStatus('Not connected.', false);
+}
+setConnectedUi(false);
+})();
+</script>
+</body>
+</html>
