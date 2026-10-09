@@ -53,7 +53,12 @@ The app is plain HTML files (`index.html`, `wedo.html`, `nxt.html`, `style.css`)
 
 # MINDSTORMS NXT
 
-Features: motors A, B and C forward, back and off with a speed slider, three beeps, brick name and battery voltage, and **Stop all motors**.
+Features:
+- Motors A, B and C forward, back and off with a speed slider, and how many degrees each has turned (with a reset)
+- Live sensor readings on ports 1–4: touch (pressed/released), light (0–100%, lamp on or off), sound (0–100%) and ultrasonic distance (cm)
+- Three beeps, brick name and battery voltage, and **Stop all motors**
+
+The brick can't detect which sensor is on which port, so choose it in the Sensors panel. The default is the standard set 9797 layout: touch on 1, sound on 2, light on 3, ultrasonic on 4. Your choice is remembered in the browser.
 
 Phones and tablets can't be used: the NXT uses an older type of Bluetooth that iOS and Android browsers can't reach. Use Chrome or Edge on a laptop or desktop.
 

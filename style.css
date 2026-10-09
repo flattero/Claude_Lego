@@ -87,3 +87,13 @@ a { color: var(--blue); }
 .note { font-size: 0.85rem; color: var(--muted); }
 .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .tone { background: #7a4cc2; }
+select { font: inherit; width: 100%; padding: 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--text); }
+.sensor { padding: 10px 0; border-top: 1px solid var(--border); }
+.sensor:first-child { border-top: none; padding-top: 0; }
+.sensor label { margin-top: 0; }
+.reading { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.reading .value { min-width: 9em; font-weight: 600; font-variant-numeric: tabular-nums; }
+.bar { flex: 1; height: 10px; border-radius: 5px; background: var(--border); overflow: hidden; }
+.bar span { display: block; height: 100%; width: 0; background: var(--green); transition: width 0.15s; }
+.turned { font-variant-numeric: tabular-nums; }
+.resetTurn { margin-left: 4px; }
