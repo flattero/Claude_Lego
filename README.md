@@ -6,6 +6,7 @@ Simple web-based controls for two older LEGO® Education kits whose official app
 | --- | --- | --- |
 | **WeDo 2.0** Smart Hub | `wedo.html` | Laptop/desktop (Chrome or Edge), Android (Chrome), iPhone/iPad (Bluefy browser only) |
 | **MINDSTORMS® NXT** brick (e.g. set 9797) | `nxt.html` | Laptop/desktop only (Chrome or Edge), by USB cable or Bluetooth |
+| **MINDSTORMS® NXT** block coding | `code.html` | Laptop/desktop only (Chrome or Edge), by USB cable or Bluetooth |
 
 The home page (`index.html`) asks which kit you have and opens the right controls.
 
@@ -41,7 +42,7 @@ Web Bluetooth only works on pages served over **HTTPS**. The easiest option is G
 2. Under **Build and deployment**, set Source to *Deploy from a branch*, choose the branch, and select the `/ (root)` folder.
 3. After a minute, the app is live at `https://<your-username>.github.io/<repo-name>/`.
 
-The app is plain HTML files (`index.html`, `wedo.html`, `nxt.html`, `style.css`) with no dependencies, so you can host it anywhere that serves HTTPS.
+The app is plain files (`index.html`, `wedo.html`, `nxt.html`, `code.html`, `nxt-lib.js`, `style.css`) with no build step, so you can host it anywhere that serves HTTPS. The block editor loads [Blockly](https://developers.google.com/blockly) from the jsDelivr CDN, so it needs an internet connection.
 
 ## WeDo 2.0 troubleshooting
 
@@ -82,3 +83,19 @@ The brick goes to sleep after a while with no activity. While connected, the app
 - **"No reply from brick":** the port opened but the brick didn't answer. On Windows you may have picked the wrong port: Windows creates two for the brick. Open Settings → Bluetooth & devices → More Bluetooth settings → COM Ports and use the one marked **Outgoing**.
 - **Worked once, now keeps failing:** the NXT's Bluetooth can get stuck after a connection ends. Restart the brick. If that doesn't help, remove the brick in the computer's Bluetooth settings and pair it again.
 - USB is more reliable than Bluetooth if you have the cable.
+
+## NXT block coding
+
+`code.html` is a Scratch-style editor for NXT programs, built with Blockly.
+
+1. Drag blocks under **when ▶ Run is clicked**. Blocks that aren't attached under a Run block don't run; several Run blocks run at the same time.
+2. Connect the brick (USB or Bluetooth) and press **▶ Run**. The block that is running lights up, and **■ Stop** ends the program at any time and stops the motors.
+3. Sensor values the program reads appear under **Readings**, and **show** blocks print to **Output**.
+
+Blocks: motors on / for seconds, rotations or degrees / stop, motor rotation; touch, light (lamp on or off), sound and ultrasonic distance on any port, timer; tones; wait, wait until, forever, repeat, while/until, if / if-else; comparisons, and/or/not, maths, random numbers, text; and variables.
+
+Each sensor block sets its port to the right sensor type the first time it's used, so the NXT page's sensor setup isn't needed.
+
+Programs are saved in the browser automatically. **Download** saves a `.json` file and **Open** loads one, for keeping or sharing programs. The **Examples** menu has five starters: drive until close to a wall, bump and turn, line follower, clap to start, and count touches.
+
+The program runs in the browser and sends commands to the brick as it goes, so the brick must stay connected. Over USB it reacts almost instantly; over Bluetooth each sensor reading takes a few hundredths of a second.
